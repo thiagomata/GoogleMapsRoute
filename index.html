@@ -1,0 +1,77 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
+    <title>Traveling in Google Maps</title>
+    <script src="http://maps.google.com/maps?file=api&amp;v=2&amp;sensor=false&amp;key=ABQIAAAAPDUET0Qt7p2VcSk6JNU1sBSM5jMcmVqUpI7aqV44cW1cEECiThQYkcZUPRJn9vy_TWxWvuLoOfSFBw" type="text/javascript"></script>
+    <script src="epoly.js" type="text/javascript"></script>
+    <script src="elabel.js" type="text/javascript"></script>
+    <script src="car.js" type="text/javascript"></script>
+    <style>
+        .vehicletype
+        {
+            width: 100px;
+            display: inline-block;
+            float: left;
+        }
+    </style>
+  </head>
+  <body onunload="GUnload()">
+      <h1> Traveling in Google Maps </h1>
+      <p>
+          Inspired in the code of <a href="http://econym.org.uk/gmap/example_cartrip3.htm">car trip</a>, 
+          I created this javascript small project. It allows to draw simultaneous vehicles, cars and 
+          planes, with travel into google maps with some cool features, like changing 
+          sprite while rotate, smarty camera, and easy to understand and extend 
+          javascript code.
+      </p>
+      <p>
+          Hope you like this. <br/> <a href="https://twitter.com/#!/ThiagoMata">Thiago Mata</a>.
+      </p>
+    <div id="controls">
+    <form>
+      <h2>Play Random Race Example</h2>
+        <span class="vehicletype">
+            Cars: 
+        </span>
+        <input type="range" name="inputQtdCars" id="inputQtdCars" min="0" max="100" value="4" onchange="javascript:document.getElementById('qtdCars').value = this.value" /> 
+        <input type="text" disabled="disabled" id="qtdCars" value="4"/>
+        <br/>
+        <span class="vehicletype">
+            Planes: 
+        </span>
+        <input type="range" name="inputQtdPlanes" id="inputQtdPlanes" min="0" max="100" value="4" onchange="javascript:document.getElementById('qtdPlanes').value = this.value"/> 
+        <input type="text" disabled="disabled" id="qtdPlanes" value="4"/>
+        <br/>
+        <span class="vehicletype">
+            Draw Path: 
+        </span>
+        <input type="checkbox" name="inputPath" id="inputPath" value="1"/> 
+        <br/>
+        <span class="vehicletype">
+            Draw Markes: 
+        </span>
+        <input type="checkbox" name="inputMarkes" id="inputMarkes" value="1"/> 
+        <br/>
+        <input type="button" value="Go!" onclick="start();return false" />
+     </form>
+    </div>
+    <div>
+        <div id="map" style="width: 1200px; height: 500px"></div>
+        <div>
+    </div>
+    <canvas id="testcanvas" width="1" height="1" style="width:100%"></canvas>
+    </div>
+	<script>
+      function start() {
+          test(
+                Math.round( document.getElementById("inputQtdCars").value ),
+                Math.round( document.getElementById("inputQtdPlanes").value ),
+                document.getElementById("inputMarkes").checked,
+                document.getElementById("inputPath").checked
+            );
+	}
+
+	</script>
+	</body>
+</html>
