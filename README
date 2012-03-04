@@ -1,0 +1,11 @@
+<h1> Traveling in Google Maps </h1>
+      <p>
+          Inspired in the code of <a href="http://econym.org.uk/gmap/example_cartrip3.htm">car trip</a>, 
+          I created this javascript small project. It allows to draw simultaneous vehicles, cars and 
+          planes, with travel into google maps with some cool features, like changing 
+          sprite while rotate, smarty camera, and easy to understand and extend 
+          javascript code.
+      </p>
+      <p>
+          Hope you like this. <br/> <a href="https://twitter.com/#!/ThiagoMata">Thiago Mata</a>.
+      </p>
