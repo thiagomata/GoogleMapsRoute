@@ -1287,7 +1287,14 @@ function FlightPlan( objPlane )
 	{
 		if( ! objFrom )
 		{
+                    if( typeof this.objPlane.strFrom == "object" )
+                    {
+                            objFrom = this.objPlane.strFrom;
+                    }
+                    else
+                    {
 			throw new Error( this.objPlane.strFrom + " not found" );
+                    }
 		}
 		this.objFrom = objFrom;
 		this.booWaitingFrom = false;
@@ -1297,7 +1304,14 @@ function FlightPlan( objPlane )
 	{
 		if( ! objTo )
 		{
+                    if( typeof this.objPlane.strTo  == "object")
+                    {
+                            objTo  = this.objPlane.strTo ;
+                    }
+                    else
+                    {
 			throw new Error( this.objPlane.strTo + " not found" );
+                    }
 		}
 		this.objTo = objTo;
 		this.booWaitingTo = false;
