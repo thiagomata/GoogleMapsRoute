@@ -94,6 +94,7 @@ function Animation()
             this.objLoading.style.borderWidth = "1px";
             this.objLoading.style.width = "0%";
             this.objLoading.style.styleFloat = "left";
+            this.objLoading.className = "loadingBox";
             this.objLoadingBox.appendChild( this.objLoading );
         }
         
