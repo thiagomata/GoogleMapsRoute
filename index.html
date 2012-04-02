@@ -1,77 +1,192 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html>
-<head>
-    <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
-    <title>Traveling in Google Maps</title>
-    <script src="http://maps.google.com/maps?file=api&amp;v=2&amp;sensor=false&amp;key=AIzaSyCTFQVbMMX4j4sjFeSKVCwsDO8sNArNmN0" type="text/javascript"></script>
-    <script src="epoly.js" type="text/javascript"></script>
-    <script src="elabel.js" type="text/javascript"></script>
-    <script src="car.js" type="text/javascript"></script>
-    <style>
-        .vehicletype
-        {
-            width: 100px;
-            display: inline-block;
-            float: left;
-        }
-    </style>
-  </head>
-  <body onunload="GUnload()">
-      <h1> Traveling in Google Maps </h1>
-      <p>
-          Inspired in the code of <a href="http://econym.org.uk/gmap/example_cartrip3.htm">car trip</a>, 
-          I created this javascript small project. It allows to draw simultaneous vehicles, cars and 
-          planes, with travel into google maps with some cool features, like changing 
-          sprite while rotate, smarty camera, and easy to understand and extend 
-          javascript code.
-      </p>
-      <p>
-          Hope you like this. <br/> <a href="https://twitter.com/#!/ThiagoMata">Thiago Mata</a>.
-      </p>
-    <div id="controls">
-    <form>
-      <h2>Play Random Race Example</h2>
-        <span class="vehicletype">
-            Cars: 
-        </span>
-        <input type="range" name="inputQtdCars" id="inputQtdCars" min="0" max="100" value="4" onchange="javascript:document.getElementById('qtdCars').value = this.value" /> 
-        <input type="text" disabled="disabled" id="qtdCars" value="4"/>
-        <br/>
-        <span class="vehicletype">
-            Planes: 
-        </span>
-        <input type="range" name="inputQtdPlanes" id="inputQtdPlanes" min="0" max="100" value="4" onchange="javascript:document.getElementById('qtdPlanes').value = this.value"/> 
-        <input type="text" disabled="disabled" id="qtdPlanes" value="4"/>
-        <br/>
-        <span class="vehicletype">
-            Draw Path: 
-        </span>
-        <input type="checkbox" name="inputPath" id="inputPath" value="1"/> 
-        <br/>
-        <span class="vehicletype">
-            Draw Markes: 
-        </span>
-        <input type="checkbox" name="inputMarkes" id="inputMarkes" value="1"/> 
-        <br/>
-        <input type="button" value="Go!" onclick="start();return false" />
-     </form>
-    </div>
-    <div>
-        <div id="map" style="width: 1200px; height: 500px"></div>
-        <div>
-    </div>
-    <canvas id="testcanvas" width="1" height="1" style="width:100%"></canvas>
-    </div>
-	<script>
-      function start() {
-          test(
-                Math.round( document.getElementById("inputQtdCars").value ),
-                Math.round( document.getElementById("inputQtdPlanes").value ),
-                document.getElementById("inputMarkes").checked,
-                document.getElementById("inputPath").checked
-            );
-	}
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
+        <title>Traveling in Google Maps</title>
+        <script src="http://maps.google.com/maps?file=api&amp;v=2&amp;sensor=false&amp;key=AIzaSyCTFQVbMMX4j4sjFeSKVCwsDO8sNArNmN0" type="text/javascript"></script>
+        <script src="epoly.js" type="text/javascript"></script>
+        <script src="elabel.js" type="text/javascript"></script>
+        <script src="car.js" type="text/javascript"></script>
+        <style>
+            .vehicletype
+            {
+                width: 100px;
+                display: inline-block;
+                float: left;
+            }
+            .bigbox
+            {
+                
+            }
+            .bigbox
+            {
+            }
+            .traveling , #controls
+            {
+                text-align: justify;
+                margin: 1%;
+                margin-top: 5px;
+                margin-bottom: 5px;
+            }
+            .traveling
+            {
+                margin-left: 20%;
+                margin-right: 20%;
+                background-color: white;
+                padding: 15px;
+                border-width: 4px;
+                border-style: solid;
+                padding: 8px;
+                border-radius: 10px;
+                border-color: #ccf;
+                font-family: Arial;
+            }
+            #controls
+            {
+                margin-left: 30%;
+                margin-right: 30%;
+                background-color: white;
+                padding: 15px;
+                border-color: #ccf;
+                border-width: 5 px;
+                border-style: solid;
+                border-radius: 10px;
+                background-color: rgb(250,250,255);
+                color: rgb(10,10,10);
+            }
+            body
+            {
+                background-color: rgb(240,240,240);
+                background-image: url(night.jpg);
+                background-size: 100%;
+                background-repeat: no-repeat;
+            }
+            #testcanvas
+            {
+                width: 1px;
+                height: 1px;
+            }
+            h1
+            {
+                color: black;
+                padding: 3px;
+                display: block;
+                border-color: #CBF2CA;
+                border-width: 0px;
+                border-top-width: 0px;
+                border-bottom-width: 0px;
+                border-style: solid;
+                font-family: Arial;
+                font-size: 30px;
+                margin: 10px;
+                margin-left: 20%;
+                text-shadow:2px 2px 4px khaki;
+            }
+            .history
+            {
+                padding-left: 50px;
+                padding-right: 50px;
+                font-size: 26px;
+                font-weight: bold;
+            }
+            #map
+            {
+                display: none;
+            }
+            #map.active
+            {
+                border-width: 5px;
+                border-style: solid;
+                border-color: white;
+                border-radius: 20px;
+                margin: 5%;
+                display: block;
+                position: absolute;
+                width: 90%;
+                height: 90%;
+                top: 0px;
+                left: 0px;
+            }
+            #features
+            {
+                display: none;
+            }
+            .cool
+            {
+                cursor: pointer;
+                color: orange;
+            }
+        </style>
+    </head>
+    <body onunload="GUnload()">
+        <div class="bigbox">
+            <h1> Traveling in Google Maps </h1>
+            <div class="traveling">
+                <p class="history">
+                    Inspired in the code of <a href="http://econym.org.uk/gmap/example_cartrip3.htm">car trip</a>, 
+                    I created this javascript small <a href="https://github.com/thiagomata/GoogleMapsRoute">project</a> with provides many 
+                    <span class="cool" onclick="javascript:document.getElementById('features').style.display = 'block'">cool features</span>
+                    using the google maps api.
+                </p>
+                <div id="features">
+                    <span> Main features: </span>
+                    <ul>
+                        <li>to draw, simultaneously, many vehicles, cars and planes</li>
+                        <li>changing sprite while rotate</li>
+                        <li>smarty camera</li>
+                        <li>event-driven programming</li>
+                    </ul>
+                </div>
+                <p>
+                    Hope you like this. <br/> <a href="https://twitter.com/#!/ThiagoMata">Thiago Mata</a>.
+                </p>
+            </div>
+            <div id="controls">
+                <form>
+                    <h2>Play Random Race Example</h2>
+                    <span class="vehicletype">
+                        Cars: 
+                    </span>
+                    <input type="range" name="inputQtdCars" id="inputQtdCars" min="0" max="100" value="4" onchange="javascript:document.getElementById('qtdCars').value = this.value" /> 
+                    <input type="text" disabled="disabled" id="qtdCars" value="4"/>
+                    <br/>
+                    <span class="vehicletype">
+                        Planes: 
+                    </span>
+                    <input type="range" name="inputQtdPlanes" id="inputQtdPlanes" min="0" max="100" value="4" onchange="javascript:document.getElementById('qtdPlanes').value = this.value"/> 
+                    <input type="text" disabled="disabled" id="qtdPlanes" value="4"/>
+                    <br/>
+                    <span class="vehicletype">
+                        Draw Path: 
+                    </span>
+                    <input type="checkbox" name="inputPath" id="inputPath" value="1"/> 
+                    <br/>
+                    <span class="vehicletype">
+                        Draw Markes: 
+                    </span>
+                    <input type="checkbox" name="inputMarkes" id="inputMarkes" value="1"/> 
+                    <br/>
+                    <input type="button" value="Go!" onclick="start();return false" />
+                </form>
+            </div>
+            <div>
+                <div id="map"></div>
+                <div>
+                </div>
+                <canvas id="testcanvas" width="1" height="1" style="width:100%"></canvas>
+            </div>
+            <script>
+                function start() {
+                    document.getElementById( "map" ).className = "active";
+                    test(
+                    Math.round( document.getElementById("inputQtdCars").value ),
+                    Math.round( document.getElementById("inputQtdPlanes").value ),
+                    document.getElementById("inputMarkes").checked,
+                    document.getElementById("inputPath").checked
+                );
+                }
 
-	</script>
-	</body>
+            </script>
+        </div>
+    </body>
 </html>
