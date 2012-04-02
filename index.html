@@ -32,22 +32,22 @@
             {
                 margin-left: 20%;
                 margin-right: 20%;
-                background-color: #FBFFFB;
+                background-color: white;
                 padding: 15px;
                 border-width: 4px;
                 border-style: solid;
                 padding: 8px;
                 border-radius: 10px;
-                border-color: #2B426B;
+                border-color: #ccf;
                 font-family: Arial;
             }
             #controls
             {
                 margin-left: 30%;
                 margin-right: 30%;
-                background-color: #FBFFFB;
+                background-color: white;
                 padding: 15px;
-                border-color: #2B426B;
+                border-color: #ccf;
                 border-width: 5 px;
                 border-style: solid;
                 border-radius: 10px;
@@ -56,9 +56,9 @@
             }
             body
             {
-                background-color: rgb(240,240,240);
                 background-image: url(night.jpg);
                 background-size: 100%;
+                background-color: black;
                 background-repeat: no-repeat;
             }
             #testcanvas
@@ -68,7 +68,7 @@
             }
             h1
             {
-                color: #FCE92A;
+                color: black;
                 padding: 3px;
                 display: block;
                 border-color: #CBF2CA;
@@ -80,7 +80,7 @@
                 font-size: 30px;
                 margin: 10px;
                 margin-left: 20%;
-                text-shadow:2px 2px 4px #080005;
+                text-shadow:2px 2px 4px khaki;
             }
             .history
             {
@@ -97,7 +97,7 @@
             {
                 border-width: 5px;
                 border-style: solid;
-                border-color: #FBFFFB;
+                border-color: white;
                 border-radius: 20px;
                 margin: 5%;
                 display: block;
@@ -116,6 +116,41 @@
                 cursor: pointer;
                 color: orange;
             }
+            input[type=button]
+            {
+                font-size: 16px;
+                float: left;
+                width: 30px;
+                margin-right: 5px;
+            }
+            input[type=text]
+            {
+                text-align: right;
+                font-size: 15px;
+                width: 40px;
+            }
+            .inputbox
+            {
+                display: block;
+                width: 100%;
+                padding: 2px;
+            }
+            #go
+            {
+                width: 100px;
+                float: left;
+            }
+            .lastlabel
+            {
+                padding-bottom: 15px;
+            }
+            .loadingBox
+            {
+                position: absolute;
+                top: 0px;
+                left: 0px;
+                z-index: 100;
+            }
         </style>
     </head>
     <body onunload="GUnload()">
@@ -131,11 +166,10 @@
                 <div id="features">
                     <span> Main features: </span>
                     <ul>
-                        <li>to draw, simultaneously, many vehicles, cars and planes;</li>
-                        <li>changing sprite while rotate;</li>
-                        <li>smarty camera;</li>
-                        <li>event-driven programming;</li> 
-                       <li>easy to understand and extend.   </li>
+                        <li>to draw many simultaneous vehicles, cars and planes</li>
+                        <li>changing sprite while rotate</li>
+                        <li>smarty camera</li>
+                        <li>event-driven programming</li>
                     </ul>
                 </div>
                 <p>
@@ -145,29 +179,37 @@
             <div id="controls">
                 <form>
                     <h2>Play Random Race Example</h2>
-                    <span class="vehicletype">
-                        Cars: 
-                    </span>
-                    <input type="range" name="inputQtdCars" id="inputQtdCars" min="0" max="100" value="4" onchange="javascript:document.getElementById('qtdCars').value = this.value" /> 
-                    <input type="text" disabled="disabled" id="qtdCars" value="4"/>
-                    <br/>
-                    <span class="vehicletype">
-                        Planes: 
-                    </span>
-                    <input type="range" name="inputQtdPlanes" id="inputQtdPlanes" min="0" max="100" value="4" onchange="javascript:document.getElementById('qtdPlanes').value = this.value"/> 
-                    <input type="text" disabled="disabled" id="qtdPlanes" value="4"/>
-                    <br/>
+                    <div class="inputbox" >
+                        <span class="vehicletype">
+                            Cars: 
+                        </span>
+                        <input type="button" value="+" onclick="javascript:increment('qtdCars')" /> 
+                        <input type="button" value="-" onclick="javascript:decrement('qtdCars')" /> 
+                        <input type="text" disabled="disabled" id="qtdCars" value="4"/>
+                    </div>
+                    <div class="inputbox" >
+                        <span class="vehicletype">
+                            Planes: 
+                        </span>
+                        <input type="button" value="+" onclick="javascript:increment('qtdPlanes')" /> 
+                        <input type="button" value="-" onclick="javascript:decrement('qtdPlanes')" /> 
+                        <input type="text" disabled="disabled" id="qtdPlanes" value="4"/>
+                    </div>
+                    <div class="inputbox" >
                     <span class="vehicletype">
                         Draw Path: 
                     </span>
                     <input type="checkbox" name="inputPath" id="inputPath" value="1"/> 
-                    <br/>
+                    </div>
+                    <div class="inputbox" >
                     <span class="vehicletype">
                         Draw Markes: 
                     </span>
                     <input type="checkbox" name="inputMarkes" id="inputMarkes" value="1"/> 
-                    <br/>
-                    <input type="button" value="Go!" onclick="start();return false" />
+                    </div>
+                    <div class="inputbox lastlabel">
+                    <input id="go" type="button" value="Go!" onclick="start();return false" />
+                    </div>
                 </form>
             </div>
             <div>
@@ -177,11 +219,33 @@
                 <canvas id="testcanvas" width="1" height="1" style="width:100%"></canvas>
             </div>
             <script>
+                function increment( strId )
+                {
+                    var objElement = document.getElementById( strId );
+                    var intValue = ( 1 * objElement.value );
+                    intValue++;
+                    if( intValue > 100 )
+                    {
+                        intValue = 100;
+                    }
+                    objElement.value = "" + intValue;
+                }
+                function decrement( strId )
+                {
+                    var objElement = document.getElementById( strId );
+                    var intValue = ( 1 * objElement.value );
+                    intValue--;
+                    if( intValue < 0 )
+                    {
+                        intValue = 0;
+                    }
+                    objElement.value = "" + intValue;
+                }
                 function start() {
                     document.getElementById( "map" ).className = "active";
                     test(
-                    Math.round( document.getElementById("inputQtdCars").value ),
-                    Math.round( document.getElementById("inputQtdPlanes").value ),
+                    Math.round( document.getElementById("qtdCars").value ),
+                    Math.round( document.getElementById("qtdPlanes").value ),
                     document.getElementById("inputMarkes").checked,
                     document.getElementById("inputPath").checked
                 );
