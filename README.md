@@ -1,5 +1,8 @@
 Traveling in Google Maps
 
+
+WIP
+
 This project is very old and since the Google Maps API has changed, it is not working.
 
 I am considering fix it and make it in a more... modern way.
