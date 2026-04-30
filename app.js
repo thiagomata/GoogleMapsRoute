@@ -7,13 +7,17 @@ class RouteAnimator {
     constructor(map) {
         this.map = map;
         this.directionsService = new google.maps.DirectionsService();
-        this.path = [];         // Array of google.maps.LatLng
+        this.path = [];
         this.marker = null;
         this.currentDistance = 0;
         this.totalDistance = 0;
-        this.speed = 50;        // meters per second
+        this.speed = 80;
         this.running = false;
         this.lastTimestamp = 0;
+        this.carImage = null;
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = 64;
+        this.canvas.height = 64;
     }
 
     async fetchRoute(origin, destination) {
@@ -26,7 +30,6 @@ class RouteAnimator {
             travelMode: google.maps.TravelMode.DRIVING
         });
 
-        // result is already the valid DirectionsResult, no status check needed
         if (!result.routes || result.routes.length === 0) {
             throw new Error('No route found');
         }
@@ -51,7 +54,7 @@ class RouteAnimator {
 
         statusEl.textContent = `Route loaded: ${Math.round(this.totalDistance)}m, ${this.path.length} points`;
 
-        // Draw the route - bright red for visibility
+        // Draw the route
         new google.maps.Polyline({
             path: this.path,
             strokeColor: '#ff0000',
@@ -60,13 +63,27 @@ class RouteAnimator {
             map: this.map
         });
 
-        // Create animated marker
+        // Load car image for canvas sprite
+        this.carImage = new Image();
+        this.carImage.crossOrigin = 'anonymous';
+        this.carImage.src = 'images/top.png';
+
+        // Wait for image to load
+        await new Promise((resolve) => {
+            this.carImage.onload = resolve;
+        });
+
+        // Create initial rotated sprite
+        this.drawSprite(0);
+
+        // Create marker with canvas icon
         this.marker = new google.maps.Marker({
             map: this.map,
             position: this.path[0],
             icon: {
-                url: 'images/top.png',
-                scaledSize: new google.maps.Size(24, 24)
+                url: this.canvas.toDataURL(),
+                scaledSize: new google.maps.Size(64, 64),
+                anchor: new google.maps.Point(32, 32)
             }
         });
 
@@ -74,6 +91,16 @@ class RouteAnimator {
         const bounds = new google.maps.LatLngBounds();
         this.path.forEach(p => bounds.extend(p));
         this.map.fitBounds(bounds);
+    }
+
+    drawSprite(rotationDegrees) {
+        const ctx = this.canvas.getContext('2d');
+        ctx.clearRect(0, 0, 64, 64);
+        ctx.save();
+        ctx.translate(32, 32);
+        ctx.rotate(rotationDegrees * Math.PI / 180);
+        ctx.drawImage(this.carImage, -32, -32, 64, 64);
+        ctx.restore();
     }
 
     getPositionAtDistance(distance) {
@@ -102,7 +129,7 @@ class RouteAnimator {
 
     getBearingAtDistance(distance) {
         const pos = this.getPositionAtDistance(distance);
-        const ahead = this.getPositionAtDistance(Math.min(distance + 50, this.totalDistance));
+        const ahead = this.getPositionAtDistance(Math.min(distance + 10, this.totalDistance));
         return google.maps.geometry.spherical.computeHeading(pos, ahead);
     }
 
@@ -123,13 +150,14 @@ class RouteAnimator {
             const position = this.getPositionAtDistance(this.currentDistance);
             const bearing = this.getBearingAtDistance(this.currentDistance);
 
-            this.marker.setPosition(position);
+            // Update sprite and marker icon
+            this.drawSprite(bearing);
             this.marker.setIcon({
-                url: 'images/top.png',
-                scaledSize: new google.maps.Size(24, 24),
-                rotation: bearing,
-                anchor: new google.maps.Point(12, 12)
+                url: this.canvas.toDataURL(),
+                scaledSize: new google.maps.Size(64, 64),
+                anchor: new google.maps.Point(32, 32)
             });
+            this.marker.setPosition(position);
 
             document.getElementById('status').textContent =
                 `${Math.round(this.currentDistance)}m / ${Math.round(this.totalDistance)}m`;
@@ -154,7 +182,7 @@ let animator;
 
 function initMap() {
     const map = new google.maps.Map(document.getElementById('map'), {
-        center: { lat: -33.8688, lng: 151.2093 },  // Sydney
+        center: { lat: -33.8688, lng: 151.2093 },
         zoom: 12,
         mapTypeId: google.maps.MapTypeId.ROADMAP
     });
@@ -167,7 +195,6 @@ async function startDemo() {
         animator.stop();
     }
 
-    // Known addresses with guaranteed driving route
     const origin = 'Circular Quay, Sydney NSW';
     const destination = 'Parramatta, Sydney NSW';
 
@@ -184,8 +211,5 @@ async function startDemo() {
     } catch (error) {
         document.getElementById('status').textContent = 'Error: ' + error.message;
         console.error('Full error:', error);
-        if (error.response) {
-            console.error('Error response:', error.response);
-        }
     }
 }
