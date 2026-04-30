@@ -16,7 +16,7 @@ class RouteAnimator {
         this.running = false;
         this.lastTimestamp = 0;
 
-        // 8 directional sprites
+        // 8 directional sprites — all images point UP (North)
         this.sprites = {};
         this.spriteNames = [
             'top', 'top_right', 'right', 'bottom_right',
@@ -109,21 +109,24 @@ class RouteAnimator {
     }
 
     getSpriteName(bearing) {
-        // Normalize to 0-360
         bearing = (bearing + 360) % 360;
         const index = Math.round(bearing / 45) % 8;
         return this.spriteNames[index];
     }
 
     updateSprite(bearing) {
+        // Pick the closest sprite and rotate it by the full bearing
         const spriteName = this.getSpriteName(bearing);
-        console.log('Bearing:', Math.round(bearing), '→ Sprite:', spriteName);
         const img = this.sprites[spriteName];
         if (!img) return;
 
         const ctx = this.canvas.getContext('2d');
         ctx.clearRect(0, 0, 64, 64);
-        ctx.drawImage(img, 0, 0, 64, 64);
+        ctx.save();
+        ctx.translate(32, 32);
+        ctx.rotate(bearing * Math.PI / 180);
+        ctx.drawImage(img, -32, -32, 64, 64);
+        ctx.restore();
     }
 
     getPositionAtDistance(distance) {
