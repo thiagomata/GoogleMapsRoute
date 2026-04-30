@@ -553,9 +553,11 @@ function Animation()
 	 */
 	this.init = function()
 	{
-		this.objMap = new GMap2( document.getElementById( this.strIdMap ) );
-		this.objMap.addControl( new GMapTypeControl() );
-		this.objMap.setCenter( new GLatLng(0,0) , 2 );
+		this.objMap = new google.maps.Map( document.getElementById( this.strIdMap ), {
+			center: new google.maps.LatLng( 0, 0 ),
+			zoom: 2,
+			mapTypeId: google.maps.MapTypeId.ROADMAP
+		});
 		this.loadVehicles();
 	}
 
@@ -1404,7 +1406,8 @@ function test( intQtdCars, intQtdPlanes , booDrawMarkes , booDrawFullPath )
 
 	var objAnimation = new Animation();
 	objAnimation.init();
-	objAnimation.objMap.setCenter(new GLatLng(40.891261,-74.558287), 15);
+	objAnimation.objMap.setCenter(new google.maps.LatLng(40.891261,-74.558287));
+	objAnimation.objMap.setZoom( 15 );
 	objAnimation.intFastFoward = 30;
 
 	var bounds = objAnimation.objMap.getBounds();
@@ -1430,12 +1433,12 @@ function loadVehicles()
 	var intMaxSimultaneosCar = 2;
 	for( intCount = 0; intCount < intMaxSimultaneosCar && ( window.objAnimation.arrVehicles.length < window.intQtdVehicles ) ; intCount++ )
 	{
-		var pointFrom = new GLatLng(
+		var pointFrom = new google.maps.LatLng(
 			window.southWest.lat() + window.latSpan * Math.random() * 10,
 			window.southWest.lng() + window.lngSpan * Math.random() * 10
 		);
 
-		var pointTo = new GLatLng(
+		var pointTo = new google.maps.LatLng(
 			window.southWest.lat() + window.latSpan * Math.random() * 10,
 			window.southWest.lng() + window.lngSpan * Math.random() * 10
 		);
