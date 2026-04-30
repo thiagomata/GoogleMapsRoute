@@ -568,7 +568,6 @@ function Animation()
 			zoom: 2,
 			mapTypeId: google.maps.MapTypeId.ROADMAP
 		});
-		this.loadVehicles();
 	}
 
 	/**
@@ -726,8 +725,8 @@ function VehicleImage()
 	{
 		var objImage = new Image();
 		objImage.src = strImage;
-		objImage.width = "32px";
-		objImage.height = "32px";
+		objImage.width = 32;
+		objImage.height = 32;
 
 		this.objImageTop		= objImage;
 		this.objImageBottom		= objImage;
@@ -744,43 +743,43 @@ function VehicleImage()
 	{
 		this.objImageTop = new Image();
           	this.objImageTop.src = this.strPathImages + "top.png";
-		this.objImageTop.width = "32px";
-		this.objImageTop.height = "32px";
+		this.objImageTop.width = 32;
+		this.objImageTop.height = 32;
 
 		this.objImageBottom = new Image();
           	this.objImageBottom.src = this.strPathImages + "bottom.png";
-		this.objImageBottom.width = "32px";
-		this.objImageBottom.height = "32px";
+		this.objImageBottom.width = 32;
+		this.objImageBottom.height = 32;
 
 		this.objImageLeft = new Image();
           	this.objImageLeft.src = this.strPathImages + "left.png";
-		this.objImageLeft.width = "32px";
-		this.objImageLeft.height = "32px";
+		this.objImageLeft.width = 32;
+		this.objImageLeft.height = 32;
 
 		this.objImageRight = new Image();
           	this.objImageRight.src = this.strPathImages + "right.png";
-		this.objImageRight.width = "32px";
-		this.objImageRight.height = "32px";
+		this.objImageRight.width = 32;
+		this.objImageRight.height = 32;
 
 		this.objImageTopLeft = new Image();
           	this.objImageTopLeft.src = this.strPathImages + "top_left.png";
-		this.objImageTopLeft.width = "32px";
-		this.objImageTopLeft.height = "32px";
+		this.objImageTopLeft.width = 32;
+		this.objImageTopLeft.height = 32;
 
 		this.objImageTopRight = new Image();
           	this.objImageTopRight.src = this.strPathImages + "top_right.png";
-		this.objImageTopRight.width = "32px";
-		this.objImageTopRight.height = "32px";
+		this.objImageTopRight.width = 32;
+		this.objImageTopRight.height = 32;
 
 		this.objImageBottomLeft = new Image();
           	this.objImageBottomLeft.src = this.strPathImages + "bottom_left.png";
-		this.objImageBottomLeft.width = "32px";
-		this.objImageBottomLeft.height = "32px";
+		this.objImageBottomLeft.width = 32;
+		this.objImageBottomLeft.height = 32;
 
 		this.objImageBottomRight = new Image();
           	this.objImageBottomRight.src = this.strPathImages + "bottom_right.png";
-		this.objImageBottomRight.width = "32px";
-		this.objImageBottomRight.height = "32px";
+		this.objImageBottomRight.width = 32;
+		this.objImageBottomRight.height = 32;
 	}
 }
 
@@ -1089,6 +1088,10 @@ function Vehicle()
 	 */
 	this.initIcon = function()
 	{
+		// Skip if no source defined - canvas rendering is handled by ELabel
+		if ( !this.src ) {
+			return;
+		}
 		this.objIcon = new Image();
 		this.objIcon.src = this.src;
 		this.objIcon.width = 32;
@@ -1250,46 +1253,24 @@ function Vehicle()
 	this.onError = function( status )
 	{
 		var statusStr = typeof status === "string" ? status : "" + status;
-		switch( statusStr )
-		{
-			case "OVER_QUERY_LIMIT":
-			case "TOO_MANY_QUERIES":
-			{
-				throw new Error( "To many queries. Don't be so greedy!" );
-			}
-			case "NOT_FOUND":
-			case "UNKNOWN_DIRECTIONS":
-			{
-				throw new Error( "Are you kidding me? This directions are unknow." );
-			}
-			case "ZERO_RESULTS":
-			case "UNAVAILABLE_ADDRESS":
-			{
-				throw new Error( "The owner of this place don't want to be found." );
-			}
-			case "UNKNOWN_ADDRESS":
-			{
-				throw new Error( "This place this don't exists. Sorry." );
-			}
-			case "MISSING_ADDRESS":
-			{
-				throw new Error( "The address is missing. Sorry" );
-			}
-			case "REQUEST_DENIED":
-			case "SERVER_ERROR":
-			case "UNKNOWN_ERROR":
-			{
-				throw new Error( "Server error. But Who knows why? Neither." );
-			}
-			case "INVALID_REQUEST":
-			{
-				throw new Error( "Server error. Bad Request." );
-			}
-			default:
-			{
-				throw new Error( "Something bad happened. This things happens, even with good people. Status: " + statusStr );
-			}
-		}
+		console.log( "Directions error for " + this.strFrom + " → " + this.strTo + ": " + statusStr );
+
+		// Build a straight-line polyline as fallback
+		var fullPath = [ this.strFrom, this.strTo ];
+		this.objPoly = new google.maps.Polyline({
+			path: fullPath,
+			strokeColor: "#000000",
+			strokeOpacity: 0,
+			strokeWeight: 0
+		});
+		this.objDrawLinePoly = new google.maps.Polyline({
+			path: [ this.strFrom ],
+			strokeColor: "#FF0000",
+			strokeWeight: 2
+		});
+		this.intEndOfLine = this.objPoly.Distance();
+		this.intSpeed = 60; // default speed
+		this.booReady = true;
 	}
 	/**
 	 * Init the checkpoints of the travel
@@ -1467,6 +1448,13 @@ function FlightPlan( objPlane )
 			return this.objFrom;
 		}
 
+		// If strFrom is already a LatLng, use it directly
+		if ( this.objPlane.strFrom instanceof google.maps.LatLng ) {
+			this.objFrom = this.objPlane.strFrom;
+			this.booWaitingFrom = false;
+			return this.objFrom;
+		}
+
 		this.booWaitingFrom = true;
 		var self = this;
 		this.objGeoCoder.geocode(
@@ -1485,6 +1473,13 @@ function FlightPlan( objPlane )
 	{
 		if( this.objTo != null )
 		{
+			return this.objTo;
+		}
+
+		// If strTo is already a LatLng, use it directly
+		if ( this.objPlane.strTo instanceof google.maps.LatLng ) {
+			this.objTo = this.objPlane.strTo;
+			this.booWaitingTo = false;
 			return this.objTo;
 		}
 
@@ -1561,26 +1556,31 @@ function test( intQtdCars, intQtdPlanes , booDrawMarkes , booDrawFullPath )
 	window.objCarImage.loadComplete();
 
 	window.objPlaneImage = new VehicleImage();
-	window.objPlaneImage.loadSimple( "plane" );
+	window.objPlaneImage.loadSimple( "plane.png" );
 
 	var objAnimation = new Animation();
 	objAnimation.init();
-	objAnimation.objMap.setCenter(new google.maps.LatLng(40.891261,-74.558287));
-	objAnimation.objMap.setZoom( 15 );
 	objAnimation.intFastFoward = 30;
 
-	var bounds = objAnimation.objMap.getBounds();
-	window.southWest = bounds.getSouthWest();
-	window.northEast = bounds.getNorthEast();
-	window.lngSpan = northEast.lng() - southWest.lng();
-	window.latSpan = northEast.lat() - southWest.lat();
-	window.objAnimation = objAnimation;
-	window.intQtdCars = intQtdCars;
-	window.intQtdPlanes = intQtdPlanes;
-	window.intQtdVehicles = intQtdPlanes + intQtdCars;
+	// Wait for map to be ready before accessing bounds
+	google.maps.event.addListenerOnce( objAnimation.objMap, 'idle', function() {
+		var bounds = objAnimation.objMap.getBounds();
+		window.southWest = bounds.getSouthWest();
+		window.northEast = bounds.getNorthEast();
+		window.lngSpan = northEast.lng() - southWest.lng();
+		window.latSpan = northEast.lat() - southWest.lat();
+		window.objAnimation = objAnimation;
+		window.intQtdCars = intQtdCars;
+		window.intQtdPlanes = intQtdPlanes;
+		window.intQtdVehicles = intQtdPlanes + intQtdCars;
+		loadVehicles();
+	} );
+
+	// Set map center and zoom, which triggers the idle event
+	objAnimation.objMap.setCenter(new google.maps.LatLng(40.891261,-74.558287));
+	objAnimation.objMap.setZoom( 15 );
         window.booDrawFullPath = booDrawFullPath;
         window.booDrawMarkes = booDrawMarkes;
-	loadVehicles();
 }
 
 function loadVehicles()

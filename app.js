@@ -1,6 +1,5 @@
 /**
  * Traveling in Google Maps — Clean v3 Implementation
- * Single car + multiple cars support
  */
 
 class Vehicle {
@@ -16,6 +15,7 @@ class Vehicle {
         this.totalDistance = 0;
         this.speed = 200;
         this.running = false;
+        this.lastTimestamp = 0;
         this.ready = false;
 
         // 8 directional sprites — all images point UP (North)
@@ -183,7 +183,7 @@ class Vehicle {
             const position = this.getPositionAtDistance(this.currentDistance);
             const bearing = this.getBearingAtDistance(this.currentDistance);
 
-            // Add position to travelled path only if moved enough (avoid point spam)
+            // Add position to travelled path only if moved enough
             const lastPoint = this.travelledPath[this.travelledPath.length - 1];
             const distFromLast = google.maps.geometry.spherical.computeDistanceBetween(lastPoint, position);
             if (distFromLast > 50) {
@@ -220,7 +220,31 @@ class Fleet {
         this.directionsService = new google.maps.DirectionsService();
         this.vehicles = [];
         this.running = false;
-        this.currentZoom = 10;  // Start zoomed out to fit all cars
+        // New state for throttling + debug
+        this.lastViewportUpdate = 0;
+        this.viewportBoundsRect = null;
+        this.truckBoundsRect = null;
+
+        // Blue rectangle: Current visible viewport bounds
+        this.viewportBoundsRect = new google.maps.Rectangle({
+            strokeColor: '#0000ff',
+            strokeWeight: 2,
+            fillOpacity: 0,
+            map: this.map
+        });
+        // Update blue rectangle whenever map viewport changes
+        this.map.addListener('bounds_changed', () => {
+            const currentBounds = this.map.getBounds();
+            if (currentBounds) this.viewportBoundsRect.setBounds(currentBounds);
+        });
+
+        // Red rectangle: Bounds containing all trucks
+        this.truckBoundsRect = new google.maps.Rectangle({
+            strokeColor: '#ff0000',
+            strokeWeight: 2,
+            fillOpacity: 0,
+            map: this.map
+        });
     }
 
     addVehicle(vehicle) {
@@ -246,50 +270,42 @@ class Fleet {
         let anyRunning = false;
         for (const vehicle of this.vehicles) {
             vehicle.animate(timestamp);
-            if (vehicle.running) {
-                anyRunning = true;
+            if (vehicle.running) anyRunning = true;
+        }
+
+        // 1. Calculate truck-containing bounds
+        const truckBounds = new google.maps.LatLngBounds();
+        for (const vehicle of this.vehicles) {
+            const pos = vehicle.getPositionAtDistance(vehicle.currentDistance);
+            truckBounds.extend(pos);
+        }
+
+        // 2. Update red debug rectangle (always show current truck bounds)
+        this.truckBoundsRect.setBounds(truckBounds);
+
+        // 3. Check if viewport update is needed
+        const timeSinceUpdate = timestamp - this.lastViewportUpdate;
+        const mapBounds = this.map.getBounds();
+        let needsUpdate = false;
+
+        // Condition A: Throttle to max 1 update per second
+        if (timeSinceUpdate > 1000) needsUpdate = true;
+
+        // Condition B: Immediate update if any truck is outside current viewport
+        if (mapBounds) {
+            for (const vehicle of this.vehicles) {
+                const pos = vehicle.getPositionAtDistance(vehicle.currentDistance);
+                if (!mapBounds.contains(pos)) {
+                    needsUpdate = true;
+                    break;
+                }
             }
         }
 
-        // Camera tracking — include ALL vehicles (active and finished)
-        const bounds = new google.maps.LatLngBounds();
-        for (const vehicle of this.vehicles) {
-            const pos = vehicle.getPositionAtDistance(vehicle.currentDistance);
-            bounds.extend(pos);
-        }
-
-        // Add padding to bounds so vehicles don't touch edges
-        const padding = 0.15;  // 15% padding on each side
-        const latCenter = (bounds.getNorthEast().lat() + bounds.getSouthWest().lat()) / 2;
-        const lngCenter = (bounds.getNorthEast().lng() + bounds.getSouthWest().lng()) / 2;
-        const latSpan = Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()) || 0.01;
-        const lngSpan = Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng()) || 0.01;
-        
-        // Rebuild bounds with padding
-        bounds = new google.maps.LatLngBounds(
-            new google.maps.LatLng(latCenter - latSpan * (0.5 + padding), lngCenter - lngSpan * (0.5 + padding)),
-            new google.maps.LatLng(latCenter + latSpan * (0.5 + padding), lngCenter + lngSpan * (0.5 + padding))
-        );
-
-        // Smooth pan — move 1/5 of the way toward target center
-        const currentCenter = this.map.getCenter();
-        const targetCenter = bounds.getCenter();
-        const latDiff = targetCenter.lat() - currentCenter.lat();
-        const lngDiff = targetCenter.lng() - currentCenter.lng();
-        const newCenter = new google.maps.LatLng(
-            currentCenter.lat() + latDiff / 5,
-            currentCenter.lng() + lngDiff / 5
-        );
-        this.map.setCenter(newCenter);
-
-        // Auto-zoom based on bounds
-        const targetZoom = this.calculateBoundsZoom(bounds);
-        const zoomDelta = targetZoom - this.currentZoom;
-        if (Math.abs(zoomDelta) > 0.3) {
-            // Faster zoom: move 1/5 of the way toward target
-            this.currentZoom += zoomDelta / 5;
-            this.map.setZoom(Math.round(this.currentZoom));
-            console.log(`Zoom: ${this.currentZoom.toFixed(1)} (target: ${targetZoom.toFixed(1)})`);
+        // 4. Apply viewport update if needed
+        if (needsUpdate) {
+            this.map.fitBounds(truckBounds, { top: 150, bottom: 150, left: 150, right: 150 });
+            this.lastViewportUpdate = timestamp;
         }
 
         if (anyRunning) {
@@ -300,31 +316,16 @@ class Fleet {
         }
     }
 
-    calculateBoundsZoom(bounds) {
-        const TILE_SIZE = 256;
-        const mapDiv = this.map.getDiv();
-        const mapWidth = mapDiv.offsetWidth;
-        const mapHeight = mapDiv.offsetHeight;
-
-        const ne = bounds.getNorthEast();
-        const sw = bounds.getSouthWest();
-        const latFraction = (ne.lat() - sw.lat()) / 180;
-        const lngDiff = ne.lng() - sw.lng();
-        const lngFraction = ((lngDiff < 0 ? lngDiff + 360 : lngDiff)) / 360;
-
-        const latZoom = Math.log((mapHeight * 2 / TILE_SIZE) / latFraction) / Math.LN2;
-        const lngZoom = Math.log((mapWidth * 2 / TILE_SIZE) / lngFraction) / Math.LN2;
-
-        // Calculate the zoom level that fits the bounds
-        return Math.max(Math.min(latZoom, lngZoom), 8);
-    }
-
     start() {
         this.running = true;
         for (const vehicle of this.vehicles) {
             vehicle.start();
         }
         requestAnimationFrame(this.animate.bind(this));
+    }
+
+    stop() {
+        this.running = false;
     }
 }
 
@@ -333,7 +334,7 @@ let fleet;
 function initMap() {
     const map = new google.maps.Map(document.getElementById('map'), {
         center: { lat: -33.8688, lng: 151.2093 },
-        zoom: 10,
+        zoom: 17,
         mapTypeId: google.maps.MapTypeId.ROADMAP
     });
 
@@ -343,16 +344,19 @@ function initMap() {
 async function startDemo() {
     if (fleet) {
         fleet.stop();
+        // Clear old debug rectangles
+        if (fleet.viewportBoundsRect) fleet.viewportBoundsRect.setMap(null);
+        if (fleet.truckBoundsRect) fleet.truckBoundsRect.setMap(null);
     }
 
     const map = new google.maps.Map(document.getElementById('map'), {
         center: { lat: -33.8688, lng: 151.2093 },
-        zoom: 10
+        zoom: 17
     });
 
     fleet = new Fleet(map);
 
-    // Create 4 cars with spread-out routes to test zoom
+    // Create 4 cars with spread-out routes
     const routes = [
         { from: [-33.8688, 151.2093], to: [-33.7500, 150.9500] },  // CBD to Penrith (far west)
         { from: [-33.8700, 151.2100], to: [-34.0500, 151.1000] },  // CBD to Cronulla (far south)
@@ -372,8 +376,12 @@ async function startDemo() {
 
     document.getElementById('status').textContent = `${fleet.vehicles.length} cars loaded`;
 
-    // Sync initial zoom from the map's current zoom
-    fleet.currentZoom = map.getZoom();
+    // Set initial view to fit all vehicle start positions (like old app's run())
+    const startBounds = new google.maps.LatLngBounds();
+    for (const vehicle of fleet.vehicles) {
+        startBounds.extend(vehicle.path[0]);
+    }
+    map.fitBounds(startBounds);
 
     fleet.start();
 }
