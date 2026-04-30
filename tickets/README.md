@@ -19,6 +19,7 @@ Tickets are ordered by severity/priority (P0 first).
 | 007 | [Add Test Suite](./007-add-test-suite.md) | Medium | P2 | 2–3 days | Pending |
 | 008 | [Performance Optimization for Large Vehicle Counts](./008-performance-optimization.md) | Medium | P3 | 1–2 days | Pending |
 | 009 | [Add CI/CD Pipeline](./009-add-ci-cd.md) | Low | P3 | 0.5–1 day | Pending |
+| 010 | [Handle Quota Exhaustion + "Bring Your Own Key"](./010-handle-quota-exhaustion-byok.md) | Medium | P2 | 1 day | Pending |
 
 ---
 
