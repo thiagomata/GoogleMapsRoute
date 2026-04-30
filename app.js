@@ -14,7 +14,7 @@ class Vehicle {
         this.travelledPolyline = null;
         this.currentDistance = 0;
         this.totalDistance = 0;
-        this.speed = 80;
+        this.speed = 200;
         this.running = false;
         this.ready = false;
 
@@ -183,9 +183,13 @@ class Vehicle {
             const position = this.getPositionAtDistance(this.currentDistance);
             const bearing = this.getBearingAtDistance(this.currentDistance);
 
-            // Add position to travelled path
-            this.travelledPath.push(position);
-            this.travelledPolyline.setPath(this.travelledPath);
+            // Add position to travelled path only if moved enough (avoid point spam)
+            const lastPoint = this.travelledPath[this.travelledPath.length - 1];
+            const distFromLast = google.maps.geometry.spherical.computeDistanceBetween(lastPoint, position);
+            if (distFromLast > 50) {
+                this.travelledPath.push(position);
+                this.travelledPolyline.setPath(this.travelledPath);
+            }
 
             // Update sprite and marker icon
             this.updateSprite(bearing);
@@ -216,6 +220,7 @@ class Fleet {
         this.directionsService = new google.maps.DirectionsService();
         this.vehicles = [];
         this.running = false;
+        this.currentZoom = 10;  // Start zoomed out to fit all cars
     }
 
     addVehicle(vehicle) {
@@ -246,12 +251,72 @@ class Fleet {
             }
         }
 
+        // Camera tracking — include ALL vehicles (active and finished)
+        const bounds = new google.maps.LatLngBounds();
+        for (const vehicle of this.vehicles) {
+            const pos = vehicle.getPositionAtDistance(vehicle.currentDistance);
+            bounds.extend(pos);
+        }
+
+        // Add padding to bounds so vehicles don't touch edges
+        const padding = 0.15;  // 15% padding on each side
+        const latCenter = (bounds.getNorthEast().lat() + bounds.getSouthWest().lat()) / 2;
+        const lngCenter = (bounds.getNorthEast().lng() + bounds.getSouthWest().lng()) / 2;
+        const latSpan = Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()) || 0.01;
+        const lngSpan = Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng()) || 0.01;
+        
+        // Rebuild bounds with padding
+        bounds = new google.maps.LatLngBounds(
+            new google.maps.LatLng(latCenter - latSpan * (0.5 + padding), lngCenter - lngSpan * (0.5 + padding)),
+            new google.maps.LatLng(latCenter + latSpan * (0.5 + padding), lngCenter + lngSpan * (0.5 + padding))
+        );
+
+        // Smooth pan — move 1/5 of the way toward target center
+        const currentCenter = this.map.getCenter();
+        const targetCenter = bounds.getCenter();
+        const latDiff = targetCenter.lat() - currentCenter.lat();
+        const lngDiff = targetCenter.lng() - currentCenter.lng();
+        const newCenter = new google.maps.LatLng(
+            currentCenter.lat() + latDiff / 5,
+            currentCenter.lng() + lngDiff / 5
+        );
+        this.map.setCenter(newCenter);
+
+        // Auto-zoom based on bounds
+        const targetZoom = this.calculateBoundsZoom(bounds);
+        const zoomDelta = targetZoom - this.currentZoom;
+        if (Math.abs(zoomDelta) > 0.3) {
+            // Faster zoom: move 1/5 of the way toward target
+            this.currentZoom += zoomDelta / 5;
+            this.map.setZoom(Math.round(this.currentZoom));
+            console.log(`Zoom: ${this.currentZoom.toFixed(1)} (target: ${targetZoom.toFixed(1)})`);
+        }
+
         if (anyRunning) {
             requestAnimationFrame(this.animate.bind(this));
         } else {
             this.running = false;
             document.getElementById('status').textContent = 'All vehicles arrived!';
         }
+    }
+
+    calculateBoundsZoom(bounds) {
+        const TILE_SIZE = 256;
+        const mapDiv = this.map.getDiv();
+        const mapWidth = mapDiv.offsetWidth;
+        const mapHeight = mapDiv.offsetHeight;
+
+        const ne = bounds.getNorthEast();
+        const sw = bounds.getSouthWest();
+        const latFraction = (ne.lat() - sw.lat()) / 180;
+        const lngDiff = ne.lng() - sw.lng();
+        const lngFraction = ((lngDiff < 0 ? lngDiff + 360 : lngDiff)) / 360;
+
+        const latZoom = Math.log((mapHeight * 2 / TILE_SIZE) / latFraction) / Math.LN2;
+        const lngZoom = Math.log((mapWidth * 2 / TILE_SIZE) / lngFraction) / Math.LN2;
+
+        // Calculate the zoom level that fits the bounds
+        return Math.max(Math.min(latZoom, lngZoom), 8);
     }
 
     start() {
@@ -268,7 +333,7 @@ let fleet;
 function initMap() {
     const map = new google.maps.Map(document.getElementById('map'), {
         center: { lat: -33.8688, lng: 151.2093 },
-        zoom: 12,
+        zoom: 10,
         mapTypeId: google.maps.MapTypeId.ROADMAP
     });
 
@@ -282,17 +347,17 @@ async function startDemo() {
 
     const map = new google.maps.Map(document.getElementById('map'), {
         center: { lat: -33.8688, lng: 151.2093 },
-        zoom: 12
+        zoom: 10
     });
 
     fleet = new Fleet(map);
 
-    // Create 4 cars with different routes
+    // Create 4 cars with spread-out routes to test zoom
     const routes = [
-        { from: [-33.8688, 151.2093], to: [-33.8200, 151.1500] },  // Circular Quay to Strathfield
-        { from: [-33.8700, 151.2100], to: [-33.8500, 151.2500] },  // CBD to Bondi area
-        { from: [-33.8650, 151.2050], to: [-33.9000, 151.1800] },  // City to Mascot
-        { from: [-33.8600, 151.2000], to: [-33.8100, 151.2200] },  // City to North Sydney
+        { from: [-33.8688, 151.2093], to: [-33.7500, 150.9500] },  // CBD to Penrith (far west)
+        { from: [-33.8700, 151.2100], to: [-34.0500, 151.1000] },  // CBD to Cronulla (far south)
+        { from: [-33.8650, 151.2050], to: [-33.8300, 151.2800] },  // CBD to Manly (north)
+        { from: [-33.8600, 151.2000], to: [-33.8100, 151.0200] },  // CBD to Blacktown (west)
     ];
 
     document.getElementById('status').textContent = 'Loading routes...';
@@ -307,12 +372,8 @@ async function startDemo() {
 
     document.getElementById('status').textContent = `${fleet.vehicles.length} cars loaded`;
 
-    // Fit map to all routes
-    const bounds = new google.maps.LatLngBounds();
-    for (const vehicle of fleet.vehicles) {
-        vehicle.path.forEach(p => bounds.extend(p));
-    }
-    map.fitBounds(bounds);
+    // Sync initial zoom from the map's current zoom
+    fleet.currentZoom = map.getZoom();
 
     fleet.start();
 }
