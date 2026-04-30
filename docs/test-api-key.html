@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google Maps API Key Test</title>
+    <style>
+        #map {
+            width: 100%;
+            height: 500px;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .loading { background: #fff3cd; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Google Maps API Key Test</h1>
+    <div id="status" class="status loading">Loading Maps API...</div>
+    <div id="map"></div>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCyMpQf6Ndp5WWOGfT245KHDhin5v1gWWw&callback=initMap" async defer></script>
+    <script>
+        function initMap() {
+            var statusEl = document.getElementById('status');
+            statusEl.className = 'status success';
+            statusEl.textContent = 'API loaded successfully! Map is displayed.';
+
+            var map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: -34.397, lng: 150.644 },
+                zoom: 8
+            });
+        }
+
+        function gm_authFailure() {
+            var statusEl = document.getElementById('status');
+            statusEl.className = 'status error';
+            statusEl.textContent = 'API key authentication failed. Check the console for details.';
+        }
+    </script>
+</body>
+</html>
