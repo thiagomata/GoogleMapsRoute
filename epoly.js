@@ -1,223 +1,257 @@
 /*********************************************************************\
 *                                                                     *
 * epolys.js                                          by Mike Williams *
+* Migrated to Google Maps API v3                                      *
 *                                                                     *
-* A Google Maps API Extension                                         *
+* PolyUtil namespace with standalone geometry functions               *
+* Plus prototype adapters on google.maps.Polyline for compatibility   *
 *                                                                     *
-* Adds various Methods to GPolygon and GPolyline                      *
-*                                                                     *
-* .Contains(latlng) returns true is the poly contains the specified   *
-*                   GLatLng                                           *
-*                                                                     *
-* .Area()           returns the approximate area of a poly that is    *
-*                   not self-intersecting                             *
-*                                                                     *
-* .Distance()       returns the length of the poly path               *
-*                                                                     *
-* .Bounds()         returns a GLatLngBounds that bounds the poly      *
-*                                                                     *
-* .GetPointAtDistance() returns a GLatLng at the specified distance   *
-*                   along the path.                                   *
-*                   The distance is specified in metres               *
-*                   Reurns null if the path is shorter than that      *
-*                                                                     *
-* .GetPointsAtDistance() returns an array of GLatLngs at the          *
-*                   specified interval along the path.                *
-*                   The distance is specified in metres               *
-*                                                                     *
-* .GetIndexAtDistance() returns the vertex number at the specified    *
-*                   distance along the path.                          *
-*                   The distance is specified in metres               *
-*                   Reurns null if the path is shorter than that      *
-*                                                                     *
-* .Bearing(v1?,v2?) returns the bearing between two vertices          *
-*                   if v1 is null, returns bearing from first to last *
-*                   if v2 is null, returns bearing from v1 to next    *
-*                                                                     *
+* PolyUtil.contains(path, point)                                      *
+* PolyUtil.area(path)                                                 *
+* PolyUtil.distance(path)                                             *
+* PolyUtil.bounds(path)                                               *
+* PolyUtil.getPointAtDistance(path, metres)                           *
+* PolyUtil.getPointsAtDistance(path, metres)                          *
+* PolyUtil.getIndexAtDistance(path, metres)                           *
+* PolyUtil.bearing(path, v1, v2)                                      *
 *                                                                     *
 ***********************************************************************
-*                                                                     *
-*   This Javascript is provided by Mike Williams                      *
+*   Original by Mike Williams                                         *
 *   Community Church Javascript Team                                  *
 *   http://www.bisphamchurch.org.uk/                                  *
 *   http://econym.org.uk/gmap/                                        *
-*                                                                     *
-*   This work is licenced under a Creative Commons Licence            *
-*   http://creativecommons.org/licenses/by/2.0/uk/                    *
-*                                                                     *
-***********************************************************************
-*                                                                     *
-* Version 1.1       6-Jun-2007                                        *
-* Version 1.2       1-Jul-2007 - fix: Bounds was omitting vertex zero *
-*                                add: Bearing                         *
-* Version 1.3       28-Nov-2008  add: GetPointsAtDistance()           *
-* Version 1.4       12-Jan-2009  fix: GetPointsAtDistance()           *
-*                                                                     *
+*   Creative Commons Licence: http://creativecommons.org/licenses/by/2.0/uk/
 \*********************************************************************/
 
+var PolyUtil = {
 
-// === A method for testing if a point is inside a polygon
-// === Returns true if poly contains point
-// === Algorithm shamelessly stolen from http://alienryderflex.com/polygon/ 
-GPolygon.prototype.Contains = function(point) {
-  var j=0;
-  var oddNodes = false;
-  var x = point.lng();
-  var y = point.lat();
-  for (var i=0; i < this.getVertexCount(); i++) {
-    j++;
-    if (j == this.getVertexCount()) {j = 0;}
-    if (((this.getVertex(i).lat() < y) && (this.getVertex(j).lat() >= y))
-    || ((this.getVertex(j).lat() < y) && (this.getVertex(i).lat() >= y))) {
-      if ( this.getVertex(i).lng() + (y - this.getVertex(i).lat())
-      /  (this.getVertex(j).lat()-this.getVertex(i).lat())
-      *  (this.getVertex(j).lng() - this.getVertex(i).lng())<x ) {
-        oddNodes = !oddNodes
-      }
-    }
-  }
-  return oddNodes;
-}
+	// Helper: distance between two LatLng points in metres
+	_dist: function( a, b ) {
+		return google.maps.geometry.spherical.computeDistanceBetween( a, b );
+	},
 
-// === A method which returns the approximate area of a non-intersecting polygon in square metres ===
-// === It doesn't fully account for spechical geometry, so will be inaccurate for large polygons ===
-// === The polygon must not intersect itself ===
-GPolygon.prototype.Area = function() {
-  var a = 0;
-  var j = 0;
-  var b = this.Bounds();
-  var x0 = b.getSouthWest().lng();
-  var y0 = b.getSouthWest().lat();
-  for (var i=0; i < this.getVertexCount(); i++) {
-    j++;
-    if (j == this.getVertexCount()) {j = 0;}
-    var x1 = this.getVertex(i).distanceFrom(new GLatLng(this.getVertex(i).lat(),x0));
-    var x2 = this.getVertex(j).distanceFrom(new GLatLng(this.getVertex(j).lat(),x0));
-    var y1 = this.getVertex(i).distanceFrom(new GLatLng(y0,this.getVertex(i).lng()));
-    var y2 = this.getVertex(j).distanceFrom(new GLatLng(y0,this.getVertex(j).lng()));
-    a += x1*y2 - x2*y1;
-  }
-  return Math.abs(a * 0.5);
-}
+	// Helper: latitude in radians
+	_latRad: function( point ) {
+		return point.lat() * Math.PI / 180;
+	},
 
-// === A method which returns the length of a path in metres ===
-GPolygon.prototype.Distance = function() {
-  var dist = 0;
-  for (var i=1; i < this.getVertexCount(); i++) {
-    dist += this.getVertex(i).distanceFrom(this.getVertex(i-1));
-  }
-  return dist;
-}
+	// Helper: longitude in radians
+	_lngRad: function( point ) {
+		return point.lng() * Math.PI / 180;
+	},
 
-// === A method which returns the bounds as a GLatLngBounds ===
-GPolygon.prototype.Bounds = function() {
-  var bounds = new GLatLngBounds();
-  for (var i=0; i < this.getVertexCount(); i++) {
-    bounds.extend(this.getVertex(i));
-  }
-  return bounds;
-}
+	// Test if a point is inside a polygon
+	// Algorithm from http://alienryderflex.com/polygon/
+	contains: function( path, point ) {
+		var oddNodes = false;
+		var j = 0;
+		var len = path.getLength();
+		var x = point.lng();
+		var y = point.lat();
+		for ( var i = 0; i < len; i++ ) {
+			j++;
+			if ( j == len ) { j = 0; }
+			var vi = path.getAt( i );
+			var vj = path.getAt( j );
+			if ( ( ( vi.lat() < y ) && ( vj.lat() >= y ) )
+			  || ( ( vj.lat() < y ) && ( vi.lat() >= y ) ) ) {
+				if ( vi.lng() + ( y - vi.lat() )
+				  /  ( vj.lat() - vi.lat() )
+				  *  ( vj.lng() - vi.lng() ) < x ) {
+					oddNodes = !oddNodes;
+				}
+			}
+		}
+		return oddNodes;
+	},
 
-// === A method which returns a GLatLng of a point a given distance along the path ===
-// === Returns null if the path is shorter than the specified distance ===
-GPolygon.prototype.GetPointAtDistance = function(metres) {
-  // some awkward special cases
-  if (metres == 0) return this.getVertex(0);
-  if (metres < 0) return null;
-  var dist=0;
-  var olddist=0;
-  for (var i=1; (i < this.getVertexCount() && dist < metres); i++) {
-    olddist = dist;
-    dist += this.getVertex(i).distanceFrom(this.getVertex(i-1));
-  }
-  if (dist < metres) {return null;}
-  var p1= this.getVertex(i-2);
-  var p2= this.getVertex(i-1);
-  var m = (metres-olddist)/(dist-olddist);
-  return new GLatLng( p1.lat() + (p2.lat()-p1.lat())*m, p1.lng() + (p2.lng()-p1.lng())*m);
-}
+	// Approximate area of a non-intersecting polygon in square metres
+	area: function( path ) {
+		var a = 0;
+		var j = 0;
+		var b = this.bounds( path );
+		var x0 = b.getSouthWest().lng();
+		var y0 = b.getSouthWest().lat();
+		var len = path.getLength();
+		for ( var i = 0; i < len; i++ ) {
+			j++;
+			if ( j == len ) { j = 0; }
+			var vi = path.getAt( i );
+			var vj = path.getAt( j );
+			var x1 = this._dist( vi, new google.maps.LatLng( vi.lat(), x0 ) );
+			var x2 = this._dist( vj, new google.maps.LatLng( vj.lat(), x0 ) );
+			var y1 = this._dist( vi, new google.maps.LatLng( y0, vi.lng() ) );
+			var y2 = this._dist( vj, new google.maps.LatLng( y0, vj.lng() ) );
+			a += x1 * y2 - x2 * y1;
+		}
+		return Math.abs( a * 0.5 );
+	},
 
-// === A method which returns an array of GLatLngs of points a given interval along the path ===
-GPolygon.prototype.GetPointsAtDistance = function(metres) {
-  var next = metres;
-  var points = [];
-  // some awkward special cases
-  if (metres <= 0) return points;
-  var dist=0;
-  var olddist=0;
-  for (var i=1; (i < this.getVertexCount()); i++) {
-    olddist = dist;
-    dist += this.getVertex(i).distanceFrom(this.getVertex(i-1));
-    while (dist > next) {
-      var p1= this.getVertex(i-1);
-      var p2= this.getVertex(i);
-      var m = (next-olddist)/(dist-olddist);
-      points.push(new GLatLng( p1.lat() + (p2.lat()-p1.lat())*m, p1.lng() + (p2.lng()-p1.lng())*m));
-      next += metres;    
-    }
-  }
-  return points;
-}
+	// Length of a path in metres
+	distance: function( path ) {
+		var dist = 0;
+		var len = path.getLength();
+		for ( var i = 1; i < len; i++ ) {
+			dist += this._dist( path.getAt( i ), path.getAt( i - 1 ) );
+		}
+		return dist;
+	},
 
-// === A method which returns the Vertex number at a given distance along the path ===
-// === Returns null if the path is shorter than the specified distance ===
-GPolygon.prototype.GetIndexAtDistance = function(metres) {
-  // some awkward special cases
-  if (metres == 0) return this.getVertex(0);
-  if (metres < 0) return null;
-  var dist=0;
-  var olddist=0;
-  for (var i=1; (i < this.getVertexCount() && dist < metres); i++) {
-    olddist = dist;
-    dist += this.getVertex(i).distanceFrom(this.getVertex(i-1));
-  }
-  if (dist < metres) {return null;}
-  return i;
-}
+	// LatLngBounds that contains the path
+	bounds: function( path ) {
+		var bounds = new google.maps.LatLngBounds();
+		var len = path.getLength();
+		for ( var i = 0; i < len; i++ ) {
+			bounds.extend( path.getAt( i ) );
+		}
+		return bounds;
+	},
 
-// === A function which returns the bearing between two vertices in decgrees from 0 to 360===
-// === If v1 is null, it returns the bearing between the first and last vertex ===
-// === If v1 is present but v2 is null, returns the bearing from v1 to the next vertex ===
-// === If either vertex is out of range, returns void ===
-GPolygon.prototype.Bearing = function(v1,v2) {
-  if (v1 == null) {
-    v1 = 0;
-    v2 = this.getVertexCount()-1;
-  } else if (v2 ==  null) {
-    v2 = v1+1;
-  }
-  if ((v1 < 0) || (v1 >= this.getVertexCount()) || (v2 < 0) || (v2 >= this.getVertexCount())) {
-    return;
-  }
-  var from = this.getVertex(v1);
-  var to = this.getVertex(v2);
-  if (from.equals(to)) {
-    return 0;
-  }
-  var lat1 = from.latRadians();
-  var lon1 = from.lngRadians();
-  var lat2 = to.latRadians();
-  var lon2 = to.lngRadians();
-  var angle = - Math.atan2( Math.sin( lon1 - lon2 ) * Math.cos( lat2 ), Math.cos( lat1 ) * Math.sin( lat2 ) - Math.sin( lat1 ) * Math.cos( lat2 ) * Math.cos( lon1 - lon2 ) );
-  if ( angle < 0.0 ) angle  += Math.PI * 2.0;
-  angle = angle * 180.0 / Math.PI;
-  return parseFloat(angle.toFixed(1));
-}
+	// LatLng at a given distance along the path
+	// Returns null if the path is shorter than the specified distance
+	getPointAtDistance: function( path, metres ) {
+		if ( metres == 0 ) return path.getAt( 0 );
+		if ( metres < 0 ) return null;
 
-GPolyline.prototype.strClassName = "GPolyline";
+		var dist = 0;
+		var olddist = 0;
+		var len = path.getLength();
+		for ( var i = 1; ( i < len && dist < metres ); i++ ) {
+			olddist = dist;
+			dist += this._dist( path.getAt( i ), path.getAt( i - 1 ) );
+		}
+		if ( dist < metres ) { return null; }
+		var p1 = path.getAt( i - 2 );
+		var p2 = path.getAt( i - 1 );
+		var m = ( metres - olddist ) / ( dist - olddist );
+		return new google.maps.LatLng(
+			p1.lat() + ( p2.lat() - p1.lat() ) * m,
+			p1.lng() + ( p2.lng() - p1.lng() ) * m
+		);
+	},
 
+	// Array of LatLngs at a given interval along the path
+	getPointsAtDistance: function( path, metres ) {
+		var next = metres;
+		var points = [];
+		if ( metres <= 0 ) return points;
 
-// === Copy all the above functions to GPolyline ===
-GPolyline.prototype.Contains             = GPolygon.prototype.Contains;
-GPolyline.prototype.Area                 = GPolygon.prototype.Area;
-GPolyline.prototype.Distance             = GPolygon.prototype.Distance;
-GPolyline.prototype.Bounds               = GPolygon.prototype.Bounds;
-GPolyline.prototype.GetPointAtDistance   = GPolygon.prototype.GetPointAtDistance;
-GPolyline.prototype.GetPointsAtDistance  = GPolygon.prototype.GetPointsAtDistance;
-GPolyline.prototype.GetIndexAtDistance   = GPolygon.prototype.GetIndexAtDistance;
-GPolyline.prototype.Bearing              = GPolygon.prototype.Bearing;
+		var dist = 0;
+		var olddist = 0;
+		var len = path.getLength();
+		for ( var i = 1; i < len; i++ ) {
+			olddist = dist;
+			dist += this._dist( path.getAt( i ), path.getAt( i - 1 ) );
+			while ( dist > next ) {
+				var p1 = path.getAt( i - 1 );
+				var p2 = path.getAt( i );
+				var m = ( next - olddist ) / ( dist - olddist );
+				points.push( new google.maps.LatLng(
+					p1.lat() + ( p2.lat() - p1.lat() ) * m,
+					p1.lng() + ( p2.lng() - p1.lng() ) * m
+				));
+				next += metres;
+			}
+		}
+		return points;
+	},
 
+	// Vertex number at a given distance along the path
+	// Returns null if the path is shorter than the specified distance
+	getIndexAtDistance: function( path, metres ) {
+		if ( metres == 0 ) return 0;
+		if ( metres < 0 ) return null;
 
+		var dist = 0;
+		var olddist = 0;
+		var len = path.getLength();
+		for ( var i = 1; ( i < len && dist < metres ); i++ ) {
+			olddist = dist;
+			dist += this._dist( path.getAt( i ), path.getAt( i - 1 ) );
+		}
+		if ( dist < metres ) { return null; }
+		return i;
+	},
 
+	// Bearing between two vertices in degrees (0 to 360)
+	bearing: function( path, v1, v2 ) {
+		var len = path.getLength();
+		if ( v1 == null ) {
+			v1 = 0;
+			v2 = len - 1;
+		} else if ( v2 == null ) {
+			v2 = v1 + 1;
+		}
+		if ( ( v1 < 0 ) || ( v1 >= len ) || ( v2 < 0 ) || ( v2 >= len ) ) {
+			return;
+		}
+		var from = path.getAt( v1 );
+		var to = path.getAt( v2 );
+		if ( from.equals( to ) ) {
+			return 0;
+		}
+		var lat1 = this._latRad( from );
+		var lon1 = this._lngRad( from );
+		var lat2 = this._latRad( to );
+		var lon2 = this._lngRad( to );
+		var angle = - Math.atan2(
+			Math.sin( lon1 - lon2 ) * Math.cos( lat2 ),
+			Math.cos( lat1 ) * Math.sin( lat2 ) - Math.sin( lat1 ) * Math.cos( lat2 ) * Math.cos( lon1 - lon2 )
+		);
+		if ( angle < 0.0 ) angle += Math.PI * 2.0;
+		angle = angle * 180.0 / Math.PI;
+		return parseFloat( angle.toFixed( 1 ) );
+	}
+};
 
+// Compatibility adapters — attach methods to google.maps.Polyline prototype
+// so existing car.js code like objPoly.Distance() continues to work
+google.maps.Polyline.prototype.Contains = function( point ) {
+	return PolyUtil.contains( this.getPath(), point );
+};
 
+google.maps.Polyline.prototype.Area = function() {
+	return PolyUtil.area( this.getPath() );
+};
+
+google.maps.Polyline.prototype.Distance = function() {
+	return PolyUtil.distance( this.getPath() );
+};
+
+google.maps.Polyline.prototype.Bounds = function() {
+	return PolyUtil.bounds( this.getPath() );
+};
+
+google.maps.Polyline.prototype.GetPointAtDistance = function( metres ) {
+	return PolyUtil.getPointAtDistance( this.getPath(), metres );
+};
+
+google.maps.Polyline.prototype.GetPointsAtDistance = function( metres ) {
+	return PolyUtil.getPointsAtDistance( this.getPath(), metres );
+};
+
+google.maps.Polyline.prototype.GetIndexAtDistance = function( metres ) {
+	return PolyUtil.getIndexAtDistance( this.getPath(), metres );
+};
+
+google.maps.Polyline.prototype.Bearing = function( v1, v2 ) {
+	return PolyUtil.bearing( this.getPath(), v1, v2 );
+};
+
+// Compatibility: v2 getVertex / getVertexCount methods used directly in car.js
+google.maps.Polyline.prototype.getVertex = function( index ) {
+	return this.getPath().getAt( index );
+};
+
+google.maps.Polyline.prototype.getVertexCount = function() {
+	return this.getPath().getLength();
+};
+
+// Compatibility: insertVertex / deleteVertex used in car.js for draw-line-on-run
+google.maps.Polyline.prototype.insertVertex = function( index, vertex ) {
+	this.getPath().insertAt( index, vertex );
+};
+
+google.maps.Polyline.prototype.deleteVertex = function( index ) {
+	this.getPath().removeAt( index );
+};
