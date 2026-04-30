@@ -15,6 +15,8 @@ class RouteAnimator {
         this.speed = 80;
         this.running = false;
         this.lastTimestamp = 0;
+        this.travelledPath = [];  // Points already travelled
+        this.travelledPolyline = null;
 
         // 8 directional sprites — all images point UP (North)
         this.sprites = {};
@@ -76,7 +78,7 @@ class RouteAnimator {
 
         statusEl.textContent = `Route loaded: ${Math.round(this.totalDistance)}m, ${this.path.length} points`;
 
-        // Draw the route
+        // Draw the route (full path)
         new google.maps.Polyline({
             path: this.path,
             strokeColor: '#ff0000',
@@ -84,6 +86,19 @@ class RouteAnimator {
             strokeWeight: 5,
             map: this.map
         });
+
+        // Draw the travelled path (green, grows as car moves)
+        this.travelledPolyline = new google.maps.Polyline({
+            path: [],
+            strokeColor: '#00cc00',
+            strokeOpacity: 1.0,
+            strokeWeight: 5,
+            map: this.map
+        });
+
+        // Initialize travelled path with starting point
+        this.travelledPath.push(this.path[0]);
+        this.travelledPolyline.setPath(this.travelledPath);
 
         // Load all 8 directional sprites
         await this.loadSprites();
@@ -175,6 +190,10 @@ class RouteAnimator {
 
             const position = this.getPositionAtDistance(this.currentDistance);
             const bearing = this.getBearingAtDistance(this.currentDistance);
+
+            // Add position to travelled path
+            this.travelledPath.push(position);
+            this.travelledPolyline.setPath(this.travelledPath);
 
             // Update sprite and marker icon
             this.updateSprite(bearing);
