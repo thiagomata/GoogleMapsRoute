@@ -1,6 +1,7 @@
 /**
  * Traveling in Google Maps — Clean v3 Implementation
  * Phase 1: Single vehicle on a known route
+ * Phase 2: 8-directional sprite rotation
  */
 
 class RouteAnimator {
@@ -14,10 +15,31 @@ class RouteAnimator {
         this.speed = 80;
         this.running = false;
         this.lastTimestamp = 0;
-        this.carImage = null;
+
+        // 8 directional sprites
+        this.sprites = {};
+        this.spriteNames = [
+            'top', 'top_right', 'right', 'bottom_right',
+            'bottom', 'bottom_left', 'left', 'top_left'
+        ];
         this.canvas = document.createElement('canvas');
         this.canvas.width = 64;
         this.canvas.height = 64;
+    }
+
+    async loadSprites() {
+        const promises = this.spriteNames.map(name => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.src = `images/${name}.png`;
+                img.onload = () => {
+                    this.sprites[name] = img;
+                    resolve();
+                };
+            });
+        });
+        await Promise.all(promises);
     }
 
     async fetchRoute(origin, destination) {
@@ -63,18 +85,11 @@ class RouteAnimator {
             map: this.map
         });
 
-        // Load car image for canvas sprite
-        this.carImage = new Image();
-        this.carImage.crossOrigin = 'anonymous';
-        this.carImage.src = 'images/top.png';
+        // Load all 8 directional sprites
+        await this.loadSprites();
 
-        // Wait for image to load
-        await new Promise((resolve) => {
-            this.carImage.onload = resolve;
-        });
-
-        // Create initial rotated sprite
-        this.drawSprite(0);
+        // Create initial sprite
+        this.updateSprite(0);
 
         // Create marker with canvas icon
         this.marker = new google.maps.Marker({
@@ -93,14 +108,22 @@ class RouteAnimator {
         this.map.fitBounds(bounds);
     }
 
-    drawSprite(rotationDegrees) {
+    getSpriteName(bearing) {
+        // Normalize to 0-360
+        bearing = (bearing + 360) % 360;
+        const index = Math.round(bearing / 45) % 8;
+        return this.spriteNames[index];
+    }
+
+    updateSprite(bearing) {
+        const spriteName = this.getSpriteName(bearing);
+        console.log('Bearing:', Math.round(bearing), '→ Sprite:', spriteName);
+        const img = this.sprites[spriteName];
+        if (!img) return;
+
         const ctx = this.canvas.getContext('2d');
         ctx.clearRect(0, 0, 64, 64);
-        ctx.save();
-        ctx.translate(32, 32);
-        ctx.rotate(rotationDegrees * Math.PI / 180);
-        ctx.drawImage(this.carImage, -32, -32, 64, 64);
-        ctx.restore();
+        ctx.drawImage(img, 0, 0, 64, 64);
     }
 
     getPositionAtDistance(distance) {
@@ -151,7 +174,7 @@ class RouteAnimator {
             const bearing = this.getBearingAtDistance(this.currentDistance);
 
             // Update sprite and marker icon
-            this.drawSprite(bearing);
+            this.updateSprite(bearing);
             this.marker.setIcon({
                 url: this.canvas.toDataURL(),
                 scaledSize: new google.maps.Size(64, 64),
