@@ -152,7 +152,7 @@ function Animation()
 						objVehicle.getStartMarker(), 
 						'<canvas id="' + objVehicle.strCanvasId + '" width="32" height="32"><\/canvas>' , 
 						null , 
-						new GSize(-16,16)
+						{ width: -16, height: 16 }
 					);
 
 					this.objMap.addOverlay( objVehicle.objMarker );
@@ -173,7 +173,10 @@ function Animation()
 				}
 				else
 				{
-					objVehicle.objMarker = new GMarker( objVehicle.getStartMarker(),{icon:Vehicle});
+					objVehicle.objMarker = new google.maps.Marker({
+						position: objVehicle.getStartMarker(),
+						map: this.objMap
+					});
 					this.objMap.addOverlay( objVehicle.objMarker );
                                         if( objVehicle.booDrawLineOnRun )
                                         {
@@ -220,20 +223,12 @@ function Animation()
 	 */
 	this.bearing = function( from, to )
 	{
-		var lat1 = from.latRadians();
-		var lon1 = from.lngRadians();
-		var lat2 = to.latRadians();
-		var lon2 = to.lngRadians();
-
-		// Compute the angle.
-		var angle = - Math.atan2(
-			Math.sin( lon1 - lon2 ) * Math.cos( lat2 ),
-			Math.cos( lat1 ) * Math.sin( lat2 ) - Math.sin( lat1 ) * Math.cos( lat2 ) * Math.cos( lon1 - lon2 )
-		);
-
+		// google.maps.geometry.spherical.computeHeading returns degrees
+		var heading = google.maps.geometry.spherical.computeHeading( from, to );
+		// Convert to radians (0-2π), matching v2 bearing convention
+		var angle = heading * Math.PI / 180;
 		if ( angle < 0.0 )
-			angle  += Math.PI * 2.0;
-
+			angle += Math.PI * 2.0;
 		return 1 * angle.toFixed(2);
 	}
 
@@ -328,16 +323,23 @@ function Animation()
 
 		if( booKeepDraw )
 		{
-			if( this.objMap.getCenter().distanceFrom( objBounds.getCenter() ) > 10 )
-			{
-				var objPoly = new GPolyline(
-					[  this.objMap.getCenter() , objBounds.getCenter() ] 
-				);
+			var currentCenter = this.objMap.getCenter();
+			var targetCenter = objBounds.getCenter();
+			var distToTarget = google.maps.geometry.spherical.computeDistanceBetween( currentCenter, targetCenter );
 
-				this.objMap.setCenter( objPoly.GetPointAtDistance( this.objMap.getCenter().distanceFrom( objBounds.getCenter() ) / 10 ) );
+			if( distToTarget > 10 )
+			{
+				// Smooth pan: move 1/10 of the way toward target
+				var latDiff = targetCenter.lat() - currentCenter.lat();
+				var lngDiff = targetCenter.lng() - currentCenter.lng();
+				var newCenter = new google.maps.LatLng(
+					currentCenter.lat() + latDiff / 10,
+					currentCenter.lng() + lngDiff / 10
+				);
+				this.objMap.setCenter( newCenter );
 			}
-		
-			var intBoundZoom = (this.objMap.getBoundsZoomLevel(objBounds));
+
+			var intBoundZoom = this.computeBoundsZoom( objBounds );
 			if( intBoundZoom  > this.dblZoom )
 			{
 				this.dblZoom += 0.1;
@@ -376,37 +378,45 @@ function Animation()
                 {
                     if( objVehicle.objDrawLinePoly.getVertexCount() > 20 )
                     {
-                            objVehicle.objDrawLinePoly = new GPolyline( [ objVehicle.getCurrentPoint() ] );
+                            objVehicle.objDrawLinePoly = new google.maps.Polyline({
+                                path: [ objVehicle.getCurrentPoint() ],
+                                strokeColor: "#FF0000",
+                                strokeWeight: 2
+                            });
                             this.objMap.addOverlay( objVehicle.objDrawLinePoly );
                     }
                 }
-                
-		// if it is not the last step
-		if ( ( objVehicle.objDirection.stepnum ) < objVehicle.objDirection.getRoute(0).getNumSteps() )
-		{
-			if(	objVehicle.getCurrentStep().getPolylineIndex()
-				< 
-				objVehicle.objPoly.GetIndexAtDistance( objVehicle.intDistance )
-			)
-			{
-				objVehicle.objDirection.stepnum++;
-				objVehicle.onNextStep();
-		    		var intStepDistMeters = objVehicle.getLastStep().getDistance().meters;
-				var intStepDistKm = intStepDistMeters / 1000; 
-				var intStepTimeSecond = objVehicle.getLastStep().getDuration().seconds;
-				var intStepTimeHour = ( intStepTimeSecond / ( 60 * 60 ) );
 
-				// speed as Km/hour
-				var intStepSpeed = ( intStepDistKm / intStepTimeHour ).toFixed(0);
-				objVehicle.setSpeed( intStepSpeed );
-				
+		var currentVertexIndex = objVehicle.objPoly.GetIndexAtDistance( objVehicle.intDistance );
+		var totalSteps = objVehicle.objDirectionsSteps ? objVehicle.objDirectionsSteps.length : 0;
+
+		// if it is not the last step
+		if ( objVehicle.intCurrentStep < totalSteps )
+		{
+			var stepStartVertex = objVehicle.arrStepVertexOffsets[ objVehicle.intCurrentStep ];
+
+			if( stepStartVertex < currentVertexIndex )
+			{
+				objVehicle.intCurrentStep++;
+				objVehicle.onNextStep();
+
+				var lastStepIndex = objVehicle.intCurrentStep - 1;
+				if ( lastStepIndex >= 0 && objVehicle.objDirectionsSteps[ lastStepIndex ] ) {
+					var intStepDistMeters = objVehicle.objDirectionsSteps[ lastStepIndex ].distance.value;
+					var intStepDistKm = intStepDistMeters / 1000;
+					var intStepTimeSecond = objVehicle.objDirectionsSteps[ lastStepIndex ].duration.value;
+					var intStepTimeHour = ( intStepTimeSecond / ( 60 * 60 ) );
+
+					// speed as Km/hour
+					var intStepSpeed = ( intStepDistKm / intStepTimeHour ).toFixed(0);
+					objVehicle.setSpeed( intStepSpeed );
+				}
 			}
 		}
 		else
 		{
 			// is the last step
-			var objLastStep = objVehicle.getLastStep();
-			if ( objLastStep.getPolylineIndex() < objVehicle.objPoly.GetIndexAtDistance( objVehicle.intDistance ) ) 
+			if ( currentVertexIndex >= objVehicle.objPoly.getVertexCount() - 1 )
 			{
 				objVehicle.arrive();
 			}
@@ -582,13 +592,42 @@ function Animation()
 			}
 
 			this.objMap.setCenter( objBounds.getCenter() );
-			this.dblZoom = this.objMap.getBoundsZoomLevel(objBounds);
+			this.dblZoom = this.computeBoundsZoom( objBounds );
 			this.objMap.setZoom( this.dblZoom );
 
 			document.getElementById("controls").style.display = "none";
 			setTimeout( this.draw.bind(this) , this.intIntervalTimer );		
 		}
 	}
+
+	/**
+	 * Compute the zoom level that fits the given bounds
+	 * Replacement for v2 getBoundsZoomLevel()
+	 */
+	this.computeBoundsZoom = function( bounds )
+	{
+		var TILE_SIZE = 256;
+		var mapWidth = this.objMap.getDiv().offsetWidth;
+		var mapHeight = this.objMap.getDiv().offsetHeight;
+
+		var ne = bounds.getNorthEast();
+		var sw = bounds.getSouthWest();
+		var latFraction = ( ne.lat() - sw.lat() ) / 180;
+
+		var lngDiff = ne.lng() - sw.lng();
+		var lngFraction = ( ( lngDiff < 0 ) ? lngDiff + 360 : lngDiff ) / 360;
+
+		var latZoom = this.mapDim( mapHeight, latFraction, TILE_SIZE );
+		var lngZoom = this.mapDim( mapWidth, lngFraction, TILE_SIZE );
+
+		return Math.min( latZoom, lngZoom, this.intMaxZoom );
+	};
+
+	this.mapDim = function( mapDim, fraction, tileSize )
+	{
+		if ( fraction == 0 ) return this.intMaxZoom;
+		return Math.floor( Math.log( mapDim / tileSize / fraction ) / Math.LN2 );
+	};
 
 	this.length = function()
 	{
@@ -787,7 +826,10 @@ function Vehicle()
 	 * Google Maps Directions Object
 	 * @GDirections
 	 */
-      	this.objDirection = new GDirections();
+       	this.objDirectionsResult = null;
+	this.objDirectionsSteps = null;
+	this.intCurrentStep = 0;
+	this.arrStepVertexOffsets = null;
 
 	/**
 	 * Position of Start of Travel
@@ -940,7 +982,14 @@ function Vehicle()
 	{
 		if( this.booDrawStartMarker )
 		{
-			objMap.addOverlay( new GMarker(this.getStartMarker(),G_START_ICON) );
+			objMap.addOverlay( new google.maps.Marker({
+				position: this.getStartMarker(),
+				map: null,
+				icon: {
+					url: "./checkpoint.png",
+					scaledSize: new google.maps.Size( 20, 20 )
+				}
+			}) );
 		}
 	}
 
@@ -965,7 +1014,14 @@ function Vehicle()
                 console.log( "add end marker" );
 		if( this.booDrawEndMarker )
 		{
-			objMap.addOverlay( new GMarker(this.getEndMarker() , G_END_ICON ) );
+			objMap.addOverlay( new google.maps.Marker({
+				position: this.getEndMarker(),
+				map: null,
+				icon: {
+					url: "./checkpoint.png",
+					scaledSize: new google.maps.Size( 20, 20 )
+				}
+			}) );
 		}
 	}
 
@@ -977,7 +1033,14 @@ function Vehicle()
 	{
 		if( this.booDrawMiddleMarker )
 		{
-			new GMarker(this.objPoly.getVertex( intVertex ) , G_PAUSE_ICON  );
+			new google.maps.Marker({
+				position: this.objPoly.getVertex( intVertex ),
+				map: null,
+				icon: {
+					url: "./checkpoint.png",
+					scaledSize: new google.maps.Size( 20, 20 )
+				}
+			});
 		}
 	}
 
@@ -1027,9 +1090,47 @@ function Vehicle()
 	this.initIcon = function()
 	{
 		this.objIcon = new Image();
-		this.objIcon.image = this.src;
-		this.objIcon.iconSize = new GSize(32,18);
-		this.objIcon.iconAnchor = new GPoint(16,9);
+		this.objIcon.src = this.src;
+		this.objIcon.width = 32;
+		this.objIcon.height = 18;
+	}
+
+	/**
+	 * Init the checkpoints of the travel
+	 */
+	this.initCheckPoints = function()
+	{
+		switch( this.strType )
+		{
+			case "car":
+			{
+				var directionsService = new google.maps.DirectionsService();
+				directionsService.route({
+					origin: this.strFrom,
+					destination: this.strTo,
+					travelMode: google.maps.TravelMode.DRIVING
+				}, ( function( self ) {
+					return function( result, status ) {
+						if ( status === google.maps.DirectionsStatus.OK ) {
+							self.onLoadCar( result );
+						} else {
+							self.onError( status );
+						}
+					};
+				} )( this ) );
+				break;
+			}
+			case "plane":
+			{
+				this.objFlightPlan = new FlightPlan( this );
+				this.objFlightPlan.init();
+				break;
+			}
+			default:
+			{
+				throw new Error( "Unknow vehicle type " + this.strType );
+			}
+		}
 	}
 
 	/**
@@ -1041,8 +1142,10 @@ function Vehicle()
 		{
 			return;
 		}
-		var strSteptext = objVehicle.objDirection.getRoute(0).getCurrentStep( objVehicle.objDirection.stepnum ).getDescriptionHtml();
-		document.getElementById( this.strStepDescriptionId ).innerHTML = "<b>Next:<\/b> "+ strSteptext;
+		if ( this.objDirectionsSteps && this.intCurrentStep < this.objDirectionsSteps.length ) {
+			var strSteptext = this.objDirectionsSteps[ this.intCurrentStep ].instructions || "";
+			document.getElementById( this.strStepDescriptionId ).innerHTML = "<b>Next:<\/b> "+ strSteptext;
+		}
 	}
 
 	/**
@@ -1064,7 +1167,10 @@ function Vehicle()
 	 */
 	this.getLastStep = function()
 	{
-		return this.objDirection.getRoute( 0 ).getStep( this.objDirection.stepnum - 1 );
+		if ( this.objDirectionsSteps && this.intCurrentStep > 0 ) {
+			return this.objDirectionsSteps[ this.intCurrentStep - 1 ];
+		}
+		return null;
 	}
 
 	/**
@@ -1072,7 +1178,10 @@ function Vehicle()
 	 */
 	this.getCurrentStep = function()
 	{
-		return this.objDirection.getRoute(0).getStep( this.objDirection.stepnum );
+		if ( this.objDirectionsSteps && this.intCurrentStep < this.objDirectionsSteps.length ) {
+			return this.objDirectionsSteps[ this.intCurrentStep ];
+		}
+		return null;
 	}
 
 	/**
@@ -1096,60 +1205,89 @@ function Vehicle()
 	}
 
 	/**
-	 * On google maps load the car
-	 * Init the Gmaps entities
+	 * Called when the DirectionsService returns a successful route
 	 */
-	this.onLoadCar = function()
+	this.onLoadCar = function( result )
 	{
-		this.objPoly = this.objDirection.getPolyline();
-		this.objDrawLinePoly = new GPolyline( this.objPoly.getVertex(0) );
+		this.objDirectionsResult = result;
+		var route = result.routes[0];
+		var leg = route.legs[0];
+		this.objDirectionsSteps = leg.steps;
+		this.intCurrentStep = 0;
+
+		// Build the full route polyline from all step paths
+		var fullPath = [];
+		this.arrStepVertexOffsets = [];
+		for ( var i = 0; i < this.objDirectionsSteps.length; i++ ) {
+			this.arrStepVertexOffsets.push( fullPath.length );
+			var stepPath = this.objDirectionsSteps[i].path;
+			for ( var j = 0; j < stepPath.length; j++ ) {
+				fullPath.push( stepPath[j] );
+			}
+		}
+
+		// Create the polyline from the full path
+		this.objPoly = new google.maps.Polyline({
+			path: fullPath,
+			strokeColor: "#000000",
+			strokeOpacity: 0,
+			strokeWeight: 0
+		});
+
+		this.objDrawLinePoly = new google.maps.Polyline({
+			path: [ fullPath[0] ],
+			strokeColor: "#FF0000",
+			strokeWeight: 2
+		});
+
 		this.intEndOfLine = this.objPoly.Distance();
 		this.booReady = true;
-		this.objDirection.stepnum = 0;
 	}
 
 	/**
 	 * Receive the error message fro the google maps and create a exception
 	 */
-	this.onError = function()
+	this.onError = function( status )
 	{
-		switch( this.objDirection.getStatus() )
+		var statusStr = typeof status === "string" ? status : "" + status;
+		switch( statusStr )
 		{
-			case G_GEO_TOO_MANY_QUERIES:
+			case "OVER_QUERY_LIMIT":
+			case "TOO_MANY_QUERIES":
 			{
 				throw new Error( "To many queries. Don't be so greedy!" );
 			}
-			case G_GEO_UNKNOWN_DIRECTIONS:
+			case "NOT_FOUND":
+			case "UNKNOWN_DIRECTIONS":
 			{
 				throw new Error( "Are you kidding me? This directions are unknow." );
-			}			
-			case G_GEO_UNAVAILABLE_ADDRESS:
+			}
+			case "ZERO_RESULTS":
+			case "UNAVAILABLE_ADDRESS":
 			{
 				throw new Error( "The owner of this place don't want to be found." );
 			}
-			case G_GEO_UNKNOWN_ADDRESS:
+			case "UNKNOWN_ADDRESS":
 			{
 				throw new Error( "This place this don't exists. Sorry." );
-			}		
-			case G_GEO_MISSING_ADDRESS:
+			}
+			case "MISSING_ADDRESS":
 			{
 				throw new Error( "The address is missing. Sorry" );
 			}
-			case G_GEO_SERVER_ERROR:
+			case "REQUEST_DENIED":
+			case "SERVER_ERROR":
+			case "UNKNOWN_ERROR":
 			{
 				throw new Error( "Server error. But Who knows why? Neither." );
 			}
-			case G_GEO_BAD_REQUEST:
-			{
-				throw new Error( "Server error. Bad Request." );
-			}
-			case G_GEO_BAD_REQUEST:
+			case "INVALID_REQUEST":
 			{
 				throw new Error( "Server error. Bad Request." );
 			}
 			default:
 			{
-				throw new Error( "Something bad happened. This things happens, even with good people." );
+				throw new Error( "Something bad happened. This things happens, even with good people. Status: " + statusStr );
 			}
 		}
 	}
@@ -1162,18 +1300,20 @@ function Vehicle()
 		{
 			case "car":
 			{
-				
-			      	this.objDirection = new GDirections();
-				this.objDirection.loadFromWaypoints(
-					[ this.strFrom , this.strTo ],
-					{getPolyline:true,getSteps:true}
-				);
-				GEvent.addListener( this.objDirection ,
-					"load", this.onLoadCar.bind(this)
-				);
-				GEvent.addListener( this.objDirection ,
-					"error", this.onError.bind(this)
-				);
+				var directionsService = new google.maps.DirectionsService();
+				directionsService.route({
+					origin: this.strFrom,
+					destination: this.strTo,
+					travelMode: google.maps.TravelMode.DRIVING
+				}, ( function( self ) {
+					return function( result, status ) {
+						if ( status === google.maps.DirectionsStatus.OK ) {
+							self.onLoadCar( result );
+						} else {
+							self.onError( status );
+						}
+					};
+				} )( this ) );
 				break;
 			}
 			case "plane":
@@ -1262,7 +1402,7 @@ function FlightPlan( objPlane )
 
 	this.booWaitingTo = true;
 
-	this.objGeoCoder = new GClientGeocoder();
+	this.objGeoCoder = new google.maps.Geocoder();
 
 	this.objLastVertex;
 
@@ -1328,9 +1468,16 @@ function FlightPlan( objPlane )
 		}
 
 		this.booWaitingFrom = true;
-		this.objGeoCoder.getLatLng(
-			this.objPlane.strFrom ,
-			this.loadFrom.bind( this )
+		var self = this;
+		this.objGeoCoder.geocode(
+			{ address: this.objPlane.strFrom },
+			function( results, status ) {
+				if ( status === google.maps.GeocoderStatus.OK ) {
+					self.loadFrom( results[0].geometry.location );
+				} else {
+					self.loadFrom( null );
+				}
+			}
 		);
 	}
 
@@ -1342,9 +1489,16 @@ function FlightPlan( objPlane )
 		}
 
 		this.booWaitingTo = true;
-		this.objGeoCoder.getLatLng(
-			this.objPlane.strTo ,
-			this.loadTo.bind( this )
+		var self = this;
+		this.objGeoCoder.geocode(
+			{ address: this.objPlane.strTo },
+			function( results, status ) {
+				if ( status === google.maps.GeocoderStatus.OK ) {
+					self.loadTo( results[0].geometry.location );
+				} else {
+					self.loadTo( null );
+				}
+			}
 		);
 	}
 
@@ -1361,7 +1515,7 @@ function FlightPlan( objPlane )
 			throw new Error( "Impossible init steps without the markers from and to" );
 		}
 
-		this.objPlane.intEndOfLine = this.objFrom.distanceFrom( this.objTo );
+		this.objPlane.intEndOfLine = google.maps.geometry.spherical.computeDistanceBetween( this.objFrom, this.objTo );
 
 		if( this.objPlane.intEndOfLine == 0 )
 		{
@@ -1372,15 +1526,20 @@ function FlightPlan( objPlane )
 		this.objCurrentVertex = this.objFrom;
 		this.objLastVertex = this.objFrom;
 
-		this.objPlane.objPoly = new GPolyline(
-			[ this.objFrom , this.objTo ]
-		);
+		this.objPlane.objPoly = new google.maps.Polyline({
+			path: [ this.objFrom, this.objTo ],
+			strokeColor: "#000000",
+			strokeOpacity: 0,
+			strokeWeight: 0
+		});
 
                 if( this.objPlane.booDrawLineOnRun )
                 {
-                    this.objPlane.objDrawLinePoly = new GPolyline(
-                            [ this.objFrom ]
-                    );
+                    this.objPlane.objDrawLinePoly = new google.maps.Polyline({
+                            path: [ this.objFrom ],
+                            strokeColor: "#FF0000",
+                            strokeWeight: 2
+                    });
                 }
                 
 		this.objPlane.booReady = true;
