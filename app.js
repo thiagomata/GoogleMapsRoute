@@ -1,22 +1,22 @@
 /**
  * Traveling in Google Maps — Clean v3 Implementation
- * Phase 1: Single vehicle on a known route
- * Phase 2: 8-directional sprite rotation
+ * Single car + multiple cars support
  */
 
-class RouteAnimator {
-    constructor(map) {
+class Vehicle {
+    constructor(map, directionsService, index) {
         this.map = map;
-        this.directionsService = new google.maps.DirectionsService();
+        this.directionsService = directionsService;
+        this.index = index;
         this.path = [];
         this.marker = null;
+        this.travelledPath = [];
+        this.travelledPolyline = null;
         this.currentDistance = 0;
         this.totalDistance = 0;
         this.speed = 80;
         this.running = false;
-        this.lastTimestamp = 0;
-        this.travelledPath = [];  // Points already travelled
-        this.travelledPolyline = null;
+        this.ready = false;
 
         // 8 directional sprites — all images point UP (North)
         this.sprites = {};
@@ -30,6 +30,8 @@ class RouteAnimator {
     }
 
     async loadSprites() {
+        if (Object.keys(this.sprites).length > 0) return;
+
         const promises = this.spriteNames.map(name => {
             return new Promise((resolve) => {
                 const img = new Image();
@@ -45,9 +47,6 @@ class RouteAnimator {
     }
 
     async fetchRoute(origin, destination) {
-        const statusEl = document.getElementById('status');
-        statusEl.textContent = 'Fetching route...';
-
         const result = await this.directionsService.route({
             origin: origin,
             destination: destination,
@@ -76,8 +75,6 @@ class RouteAnimator {
             );
         }
 
-        statusEl.textContent = `Route loaded: ${Math.round(this.totalDistance)}m, ${this.path.length} points`;
-
         // Draw the route (full path)
         new google.maps.Polyline({
             path: this.path,
@@ -100,13 +97,13 @@ class RouteAnimator {
         this.travelledPath.push(this.path[0]);
         this.travelledPolyline.setPath(this.travelledPath);
 
-        // Load all 8 directional sprites
+        // Load sprites
         await this.loadSprites();
 
         // Create initial sprite
         this.updateSprite(0);
 
-        // Create marker with canvas icon
+        // Create marker
         this.marker = new google.maps.Marker({
             map: this.map,
             position: this.path[0],
@@ -117,10 +114,7 @@ class RouteAnimator {
             }
         });
 
-        // Fit map to route
-        const bounds = new google.maps.LatLngBounds();
-        this.path.forEach(p => bounds.extend(p));
-        this.map.fitBounds(bounds);
+        this.ready = true;
     }
 
     getSpriteName(bearing) {
@@ -130,7 +124,6 @@ class RouteAnimator {
     }
 
     updateSprite(bearing) {
-        // Pick the closest sprite and rotate it by the full bearing
         const spriteName = this.getSpriteName(bearing);
         const img = this.sprites[spriteName];
         if (!img) return;
@@ -184,7 +177,6 @@ class RouteAnimator {
             if (this.currentDistance >= this.totalDistance) {
                 this.currentDistance = this.totalDistance;
                 this.running = false;
-                document.getElementById('status').textContent = 'Arrived!';
                 return;
             }
 
@@ -203,19 +195,14 @@ class RouteAnimator {
                 anchor: new google.maps.Point(32, 32)
             });
             this.marker.setPosition(position);
-
-            document.getElementById('status').textContent =
-                `${Math.round(this.currentDistance)}m / ${Math.round(this.totalDistance)}m`;
         }
 
         this.lastTimestamp = timestamp;
-        requestAnimationFrame(this.animate.bind(this));
     }
 
     start() {
         this.running = true;
         this.lastTimestamp = 0;
-        requestAnimationFrame(this.animate.bind(this));
     }
 
     stop() {
@@ -223,7 +210,60 @@ class RouteAnimator {
     }
 }
 
-let animator;
+class Fleet {
+    constructor(map) {
+        this.map = map;
+        this.directionsService = new google.maps.DirectionsService();
+        this.vehicles = [];
+        this.running = false;
+    }
+
+    addVehicle(vehicle) {
+        this.vehicles.push(vehicle);
+    }
+
+    async createCar(lat1, lng1, lat2, lng2) {
+        const vehicle = new Vehicle(this.map, this.directionsService, this.vehicles.length);
+        const origin = { lat: lat1, lng: lng1 };
+        const destination = { lat: lat2, lng: lng2 };
+
+        try {
+            await vehicle.fetchRoute(origin, destination);
+            this.addVehicle(vehicle);
+        } catch (error) {
+            console.error('Failed to create car:', error);
+        }
+    }
+
+    animate(timestamp) {
+        if (!this.running) return;
+
+        let anyRunning = false;
+        for (const vehicle of this.vehicles) {
+            vehicle.animate(timestamp);
+            if (vehicle.running) {
+                anyRunning = true;
+            }
+        }
+
+        if (anyRunning) {
+            requestAnimationFrame(this.animate.bind(this));
+        } else {
+            this.running = false;
+            document.getElementById('status').textContent = 'All vehicles arrived!';
+        }
+    }
+
+    start() {
+        this.running = true;
+        for (const vehicle of this.vehicles) {
+            vehicle.start();
+        }
+        requestAnimationFrame(this.animate.bind(this));
+    }
+}
+
+let fleet;
 
 function initMap() {
     const map = new google.maps.Map(document.getElementById('map'), {
@@ -232,29 +272,47 @@ function initMap() {
         mapTypeId: google.maps.MapTypeId.ROADMAP
     });
 
-    animator = new RouteAnimator(map);
+    fleet = new Fleet(map);
 }
 
 async function startDemo() {
-    if (animator) {
-        animator.stop();
+    if (fleet) {
+        fleet.stop();
     }
 
-    const origin = 'Circular Quay, Sydney NSW';
-    const destination = 'Parramatta, Sydney NSW';
+    const map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: -33.8688, lng: 151.2093 },
+        zoom: 12
+    });
 
-    animator = new RouteAnimator(
-        new google.maps.Map(document.getElementById('map'), {
-            center: { lat: -33.8688, lng: 151.2093 },
-            zoom: 12
-        })
+    fleet = new Fleet(map);
+
+    // Create 4 cars with different routes
+    const routes = [
+        { from: [-33.8688, 151.2093], to: [-33.8200, 151.1500] },  // Circular Quay to Strathfield
+        { from: [-33.8700, 151.2100], to: [-33.8500, 151.2500] },  // CBD to Bondi area
+        { from: [-33.8650, 151.2050], to: [-33.9000, 151.1800] },  // City to Mascot
+        { from: [-33.8600, 151.2000], to: [-33.8100, 151.2200] },  // City to North Sydney
+    ];
+
+    document.getElementById('status').textContent = 'Loading routes...';
+
+    // Load all routes in parallel
+    const promises = routes.map((r, i) =>
+        fleet.createCar(r.from[0], r.from[1], r.to[0], r.to[1])
+            .then(() => console.log(`Car ${i + 1} ready`))
     );
 
-    try {
-        await animator.fetchRoute(origin, destination);
-        animator.start();
-    } catch (error) {
-        document.getElementById('status').textContent = 'Error: ' + error.message;
-        console.error('Full error:', error);
+    await Promise.all(promises);
+
+    document.getElementById('status').textContent = `${fleet.vehicles.length} cars loaded`;
+
+    // Fit map to all routes
+    const bounds = new google.maps.LatLngBounds();
+    for (const vehicle of fleet.vehicles) {
+        vehicle.path.forEach(p => bounds.extend(p));
     }
+    map.fitBounds(bounds);
+
+    fleet.start();
 }
