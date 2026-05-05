@@ -9,10 +9,9 @@ let settings = {
         mapTypeId: google.maps.MapTypeId.ROADMAP
     },
     vehicles: [
-        { from: [-33.8688, 151.2093], to: [-33.7500, 150.9500] },  // CBD to Penrith (far west)
-        { from: [-33.8700, 151.2100], to: [-34.0500, 151.1000] },  // CBD to Cronulla (far south)
-
-        { from: [-33.8600, 151.2000], to: [-33.8100, 151.0200] },  // CBD to Blacktown (west)
+        { from: [-33.8688, 151.2093], to: [-33.9000, 151.2000] },  // CBD to Surry Hills
+        { from: [-33.8700, 151.2100], to: [-33.8500, 151.2500] },  // CBD to Double Bay
+        { from: [-33.8600, 151.2000], to: [-33.8800, 151.1800] },  // CBD to Pyrmont
     ],
     viewport: {
         padding: { top: 150, bottom: 150, left: 150, right: 150 },
@@ -268,7 +267,7 @@ class Fleet {
         this.isPanning = false;
         // Zoom cooldown: prevent zoom in immediately after zoom out
         this.lastZoomInTime = 0;
-        this.zoomInCooldownMs = 10000;
+        this.zoomInCooldownMs = 2000;
 
         // Blue rectangle: Current visible viewport bounds
         this.viewportBoundsRect = new google.maps.Rectangle({
@@ -360,7 +359,7 @@ class Fleet {
         // 3. Update viewport (throttled)
         const now = timestamp || performance.now();
         if (now - this.lastViewportUpdate > settings.viewport.throttleMs) {
-            if (activeVehicles > 1) {
+            if (activeVehicles > 0) {
                 const currentBounds = this.map.getBounds();
                 // Check if any truck is outside viewport (check all 4 corners of truck bounds)
                 const trucksOutsideViewport = currentBounds ? 
@@ -409,6 +408,13 @@ class Fleet {
         } else {
             this.running = false;
             document.getElementById('status').textContent = 'All vehicles arrived!';
+            
+            // Zoom to show all arrived vehicles
+            const allBounds = new google.maps.LatLngBounds();
+            for (const vehicle of this.vehicles) {
+                allBounds.extend(vehicle.marker.getPosition());
+            }
+            this.map.fitBounds(allBounds, settings.viewport.padding);
         }
     }
 
