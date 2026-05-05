@@ -2,20 +2,54 @@
  * Traveling in Google Maps — Clean v3 Implementation
  */
 
+let settings = {
+    map: {
+        center: { lat: -33.8688, lng: 151.2093 },
+        zoom: 17,
+        mapTypeId: google.maps.MapTypeId.ROADMAP
+    },
+    vehicles: [
+        { from: [-33.8688, 151.2093], to: [-33.7500, 150.9500] },  // CBD to Penrith (far west)
+        { from: [-33.8700, 151.2100], to: [-34.0500, 151.1000] },  // CBD to Cronulla (far south)
+
+        { from: [-33.8600, 151.2000], to: [-33.8100, 151.0200] },  // CBD to Blacktown (west)
+    ],
+    viewport: {
+        padding: { top: 150, bottom: 150, left: 150, right: 150 },
+        throttleMs: 1000,
+        minThrottleMs: 200,
+        includeArrivedVehicles: false,
+        maxZoom: 15,
+        panDurationMs: 800,
+        defaultZoom: 10
+    },
+    vehicleSpeed: 150,
+    debug: {
+        showViewportRect: true,
+        showTruckBoundsRect: true
+    }
+};
+
 class Vehicle {
     constructor(map, directionsService, index) {
         this.map = map;
         this.directionsService = directionsService;
         this.index = index;
-        this.path = [];
-        this.marker = null;
-        this.travelledPath = [];
-        this.travelledPolyline = null;
+        this.running = false;
         this.currentDistance = 0;
         this.totalDistance = 0;
-        this.speed = 200;
-        this.running = false;
+        this.path = [];
+        this.speed = settings.vehicleSpeed;
         this.lastTimestamp = 0;
+        this.travelledPath = [];
+        this.travelledPolyline = null;
+        this.marker = null;
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = 64;
+        this.canvas.height = 64;
+        this.sprites = {};
+        this.spriteNames = ['top', 'top_right', 'right', 'bottom_right', 'bottom', 'bottom_left', 'left', 'top_left'];
+        this.currentSpriteName = null;
         this.ready = false;
 
         // 8 directional sprites — all images point UP (North)
@@ -125,6 +159,11 @@ class Vehicle {
 
     updateSprite(bearing) {
         const spriteName = this.getSpriteName(bearing);
+
+        // Only redraw if sprite changed
+        if (spriteName === this.currentSpriteName) return;
+        this.currentSpriteName = spriteName;
+
         const img = this.sprites[spriteName];
         if (!img) return;
 
@@ -135,6 +174,15 @@ class Vehicle {
         ctx.rotate(bearing * Math.PI / 180);
         ctx.drawImage(img, -32, -32, 64, 64);
         ctx.restore();
+
+        // Update marker icon only if marker exists
+        if (this.marker) {
+            this.marker.setIcon({
+                url: this.canvas.toDataURL(),
+                scaledSize: new google.maps.Size(64, 64),
+                anchor: new google.maps.Point(32, 32)
+            });
+        }
     }
 
     getPositionAtDistance(distance) {
@@ -191,13 +239,8 @@ class Vehicle {
                 this.travelledPolyline.setPath(this.travelledPath);
             }
 
-            // Update sprite and marker icon
+            // Update sprite (only updates icon when sprite changes)
             this.updateSprite(bearing);
-            this.marker.setIcon({
-                url: this.canvas.toDataURL(),
-                scaledSize: new google.maps.Size(64, 64),
-                anchor: new google.maps.Point(32, 32)
-            });
             this.marker.setPosition(position);
         }
 
@@ -222,29 +265,50 @@ class Fleet {
         this.running = false;
         // New state for throttling + debug
         this.lastViewportUpdate = 0;
-        this.viewportBoundsRect = null;
-        this.truckBoundsRect = null;
+        this.isPanning = false;
+        // Zoom cooldown: prevent zoom in immediately after zoom out
+        this.lastZoomInTime = 0;
+        this.zoomInCooldownMs = 10000;
 
         // Blue rectangle: Current visible viewport bounds
         this.viewportBoundsRect = new google.maps.Rectangle({
             strokeColor: '#0000ff',
             strokeWeight: 2,
             fillOpacity: 0,
-            map: this.map
+            map: settings.debug.showViewportRect ? this.map : null
         });
         // Update blue rectangle whenever map viewport changes
-        this.map.addListener('bounds_changed', () => {
-            const currentBounds = this.map.getBounds();
-            if (currentBounds) this.viewportBoundsRect.setBounds(currentBounds);
-        });
+        if (settings.debug.showViewportRect) {
+            this.map.addListener('bounds_changed', () => {
+                const currentBounds = this.map.getBounds();
+                if (currentBounds) this.viewportBoundsRect.setBounds(currentBounds);
+            });
+        }
 
         // Red rectangle: Bounds containing all trucks
         this.truckBoundsRect = new google.maps.Rectangle({
             strokeColor: '#ff0000',
             strokeWeight: 2,
             fillOpacity: 0,
-            map: this.map
+            map: settings.debug.showTruckBoundsRect ? this.map : null
         });
+    }
+
+    getTruckCoverageRatio(truckBounds) {
+        const viewportBounds = this.map.getBounds();
+        if (!viewportBounds) return 0;
+
+        // Calculate lat/lng spans
+        const truckLatSpan = Math.abs(truckBounds.getNorthEast().lat() - truckBounds.getSouthWest().lat());
+        const truckLngSpan = Math.abs(truckBounds.getNorthEast().lng() - truckBounds.getSouthWest().lng());
+
+        const viewportLatSpan = Math.abs(viewportBounds.getNorthEast().lat() - viewportBounds.getSouthWest().lat());
+        const viewportLngSpan = Math.abs(viewportBounds.getNorthEast().lng() - viewportBounds.getSouthWest().lng());
+
+        // Return average coverage ratio
+        const latRatio = truckLatSpan / viewportLatSpan;
+        const lngRatio = truckLngSpan / viewportLngSpan;
+        return (latRatio + lngRatio) / 2;
     }
 
     addVehicle(vehicle) {
@@ -273,39 +337,71 @@ class Fleet {
             if (vehicle.running) anyRunning = true;
         }
 
-        // 1. Calculate truck-containing bounds
+        // 1. Calculate truck-containing bounds and count active vehicles
         const truckBounds = new google.maps.LatLngBounds();
+        let activeVehicles = 0;
+        let lastPosition = null;
+
         for (const vehicle of this.vehicles) {
+            if (!settings.viewport.includeArrivedVehicles && !vehicle.running && vehicle.currentDistance >= vehicle.totalDistance) {
+                continue;
+            }
             const pos = vehicle.getPositionAtDistance(vehicle.currentDistance);
             truckBounds.extend(pos);
+            lastPosition = pos;
+            activeVehicles++;
         }
 
-        // 2. Update red debug rectangle (always show current truck bounds)
-        this.truckBoundsRect.setBounds(truckBounds);
+        // 2. Update red debug rectangle (throttled)
+        if (activeVehicles > 1) {
+            this.truckBoundsRect.setBounds(truckBounds);
+        }
 
-        // 3. Check if viewport update is needed
-        const timeSinceUpdate = timestamp - this.lastViewportUpdate;
-        const mapBounds = this.map.getBounds();
-        let needsUpdate = false;
-
-        // Condition A: Throttle to max 1 update per second
-        if (timeSinceUpdate > 1000) needsUpdate = true;
-
-        // Condition B: Immediate update if any truck is outside current viewport
-        if (mapBounds) {
-            for (const vehicle of this.vehicles) {
-                const pos = vehicle.getPositionAtDistance(vehicle.currentDistance);
-                if (!mapBounds.contains(pos)) {
-                    needsUpdate = true;
-                    break;
+        // 3. Update viewport (throttled)
+        const now = timestamp || performance.now();
+        if (now - this.lastViewportUpdate > settings.viewport.throttleMs) {
+            if (activeVehicles > 1) {
+                const currentBounds = this.map.getBounds();
+                // Check if any truck is outside viewport (check all 4 corners of truck bounds)
+                const trucksOutsideViewport = currentBounds ? 
+                    !currentBounds.contains(truckBounds.getSouthWest()) ||
+                    !currentBounds.contains(truckBounds.getNorthEast()) ||
+                    !currentBounds.contains(new google.maps.LatLng(truckBounds.getSouthWest().lat(), truckBounds.getNorthEast().lng())) ||
+                    !currentBounds.contains(new google.maps.LatLng(truckBounds.getNorthEast().lat(), truckBounds.getSouthWest().lng()))
+                    : true;
+                const coverageRatio = this.getTruckCoverageRatio(truckBounds);
+                
+                const targetRatio = 0.5; // Target: trucks should be ~50% of screen
+                const hysteresis = 0.1; // Don't zoom if within 10% of target
+                
+                // Zoom out: immediate when trucks leave viewport
+                if (trucksOutsideViewport) {
+                    this.map.fitBounds(truckBounds, settings.viewport.padding);
+                    this.lastZoomInTime = now; // Reset zoom in cooldown after zoom out
+                    
+                    google.maps.event.addListenerOnce(this.map, 'idle', () => {
+                        const currentZoom = this.map.getZoom();
+                        if (currentZoom > settings.viewport.maxZoom) {
+                            this.map.setZoom(settings.viewport.maxZoom);
+                        }
+                    });
+                }
+                // Zoom in: only if trucks are too small (< 40% of screen) AND cooldown expired
+                else if (coverageRatio < (targetRatio - hysteresis) && now - this.lastZoomInTime > this.zoomInCooldownMs) {
+                    this.map.fitBounds(truckBounds, settings.viewport.padding);
+                    this.lastZoomInTime = now;
+                    
+                    google.maps.event.addListenerOnce(this.map, 'idle', () => {
+                        const currentZoom = this.map.getZoom();
+                        if (currentZoom > settings.viewport.maxZoom) {
+                            this.map.setZoom(settings.viewport.maxZoom);
+                        }
+                    });
                 }
             }
-        }
+            // Single vehicle: no forced viewport updates (avoid flash from tile reloads)
 
-        // 4. Apply viewport update if needed
-        if (needsUpdate) {
-            this.map.fitBounds(truckBounds, { top: 150, bottom: 150, left: 150, right: 150 });
-            this.lastViewportUpdate = timestamp;
+            this.lastViewportUpdate = now;
         }
 
         if (anyRunning) {
@@ -332,12 +428,7 @@ class Fleet {
 let fleet;
 
 function initMap() {
-    const map = new google.maps.Map(document.getElementById('map'), {
-        center: { lat: -33.8688, lng: 151.2093 },
-        zoom: 17,
-        mapTypeId: google.maps.MapTypeId.ROADMAP
-    });
-
+    const map = new google.maps.Map(document.getElementById('map'), settings.map);
     fleet = new Fleet(map);
 }
 
@@ -349,25 +440,13 @@ async function startDemo() {
         if (fleet.truckBoundsRect) fleet.truckBoundsRect.setMap(null);
     }
 
-    const map = new google.maps.Map(document.getElementById('map'), {
-        center: { lat: -33.8688, lng: 151.2093 },
-        zoom: 17
-    });
-
+    const map = new google.maps.Map(document.getElementById('map'), settings.map);
     fleet = new Fleet(map);
-
-    // Create 4 cars with spread-out routes
-    const routes = [
-        { from: [-33.8688, 151.2093], to: [-33.7500, 150.9500] },  // CBD to Penrith (far west)
-        { from: [-33.8700, 151.2100], to: [-34.0500, 151.1000] },  // CBD to Cronulla (far south)
-        { from: [-33.8650, 151.2050], to: [-33.8300, 151.2800] },  // CBD to Manly (north)
-        { from: [-33.8600, 151.2000], to: [-33.8100, 151.0200] },  // CBD to Blacktown (west)
-    ];
 
     document.getElementById('status').textContent = 'Loading routes...';
 
-    // Load all routes in parallel
-    const promises = routes.map((r, i) =>
+    // Load all routes in parallel from settings
+    const promises = settings.vehicles.map((r, i) =>
         fleet.createCar(r.from[0], r.from[1], r.to[0], r.to[1])
             .then(() => console.log(`Car ${i + 1} ready`))
     );
@@ -376,7 +455,7 @@ async function startDemo() {
 
     document.getElementById('status').textContent = `${fleet.vehicles.length} cars loaded`;
 
-    // Set initial view to fit all vehicle start positions (like old app's run())
+    // Set initial view to fit all vehicle start positions
     const startBounds = new google.maps.LatLngBounds();
     for (const vehicle of fleet.vehicles) {
         startBounds.extend(vehicle.path[0]);

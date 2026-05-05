@@ -42,6 +42,18 @@ function Animation()
 	this.dblZoomForSpeed = 800;
 
 	/**
+	 * Last time zoom direction changed
+	 * @var integer
+	 */
+	this.intLastZoomDirectionChange = 0;
+
+	/**
+	 * Current zoom direction: 1 for in, -1 for out, 0 for none
+	 * @var integer
+	 */
+	this.intZoomDirection = 0;
+
+	/**
 	 * Refresh time of animation in miliseconds
 	 * @var integer
 	 */
@@ -339,15 +351,47 @@ function Animation()
 				this.objMap.setCenter( newCenter );
 			}
 
-			var intBoundZoom = this.computeBoundsZoom( objBounds );
-			if( intBoundZoom  > this.dblZoom )
-			{
-				this.dblZoom += 0.1;
-			}
-			else
-			{
-				this.dblZoom -= 0.1;
-			}
+		var intBoundZoom = this.computeBoundsZoom( objBounds );
+		var now = Date.now();
+
+		// Determine desired direction
+		var desiredDir = 0;
+		if( intBoundZoom > this.dblZoom + 0.3 ) desiredDir = 1; // zoom in
+		else if( intBoundZoom < this.dblZoom - 0.3 ) desiredDir = -1; // zoom out
+
+		console.log('ZOOM DEBUG:', {
+			intBoundZoom: intBoundZoom,
+			dblZoom: this.dblZoom,
+			desiredDir: desiredDir,
+			currentDir: this.intZoomDirection,
+			timeSinceLastChange: now - this.intLastZoomDirectionChange,
+			inCooldown: now - this.intLastZoomDirectionChange < 2000
+		});
+
+		// Zoom out: immediate (cars need to stay visible)
+		// Zoom in: only after cooldown
+		if( desiredDir === -1 )
+		{
+			this.intZoomDirection = -1;
+			this.intLastZoomDirectionChange = now;
+			console.log('ZOOM: Zooming OUT immediately');
+		}
+		else if( desiredDir === 1 && now - this.intLastZoomDirectionChange > 2000 )
+		{
+			this.intZoomDirection = 1;
+			this.intLastZoomDirectionChange = now;
+			console.log('ZOOM: Zooming IN after cooldown');
+		}
+		else if( desiredDir === 1 )
+		{
+			console.log('ZOOM: Want to zoom IN but in cooldown, keeping direction:', this.intZoomDirection);
+		}
+
+		// Apply zoom change in current direction
+		if( this.intZoomDirection === 1 ) this.dblZoom += 0.1;
+		else if( this.intZoomDirection === -1 ) this.dblZoom -= 0.1;
+
+		console.log('ZOOM: New dblZoom:', this.dblZoom, 'Direction:', this.intZoomDirection);
 
 			if( this.dblZoom > this.intMaxZoom )
 			{ 
