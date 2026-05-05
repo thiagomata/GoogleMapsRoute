@@ -19,7 +19,7 @@ let settings = {
         minThrottleMs: 200,
         includeArrivedVehicles: false,
         maxZoom: 15,
-        panDurationMs: 800,
+        panDurationMs: 2000,
         defaultZoom: 10
     },
     vehicleSpeed: 150,
@@ -304,10 +304,30 @@ class Fleet {
         const viewportLatSpan = Math.abs(viewportBounds.getNorthEast().lat() - viewportBounds.getSouthWest().lat());
         const viewportLngSpan = Math.abs(viewportBounds.getNorthEast().lng() - viewportBounds.getSouthWest().lng());
 
-        // Return average coverage ratio
+        // Return max ratio to determine if trucks are too small on screen
         const latRatio = truckLatSpan / viewportLatSpan;
         const lngRatio = truckLngSpan / viewportLngSpan;
-        return (latRatio + lngRatio) / 2;
+        return Math.max(latRatio, lngRatio);
+    }
+
+    computeZoomFromBounds(bounds) {
+        const TILE_SIZE = 256;
+        const mapDiv = this.map.getDiv();
+        const padding = settings.viewport.padding;
+        const mapWidth = mapDiv.offsetWidth - (padding.left + padding.right);
+        const mapHeight = mapDiv.offsetHeight - (padding.top + padding.bottom);
+        
+        const ne = bounds.getNorthEast();
+        const sw = bounds.getSouthWest();
+        
+        const latFraction = (ne.lat() - sw.lat()) / 180;
+        const lngDiff = ne.lng() - sw.lng();
+        const lngFraction = ((lngDiff < 0) ? lngDiff + 360 : lngDiff) / 360;
+        
+        const latZoom = Math.floor(Math.log(mapHeight / TILE_SIZE / latFraction) / Math.LN2);
+        const lngZoom = Math.floor(Math.log(mapWidth / TILE_SIZE / lngFraction) / Math.LN2);
+        
+        return Math.min(latZoom, lngZoom, settings.viewport.maxZoom);
     }
 
     addVehicle(vehicle) {
@@ -373,32 +393,45 @@ class Fleet {
                 const targetRatio = 0.5; // Target: trucks should be ~50% of screen
                 const hysteresis = 0.1; // Don't zoom if within 10% of target
                 
-                // Zoom out: immediate when trucks leave viewport
-                if (trucksOutsideViewport) {
-                    this.map.fitBounds(truckBounds, settings.viewport.padding);
-                    this.lastZoomInTime = now; // Reset zoom in cooldown after zoom out
+                // Determine if viewport update is needed
+                const shouldUpdateViewport = trucksOutsideViewport || 
+                    (coverageRatio < (targetRatio - hysteresis) && now - this.lastZoomInTime > this.zoomInCooldownMs);
+
+                if (shouldUpdateViewport) {
+                    const targetCenter = truckBounds.getCenter();
+                    const targetZoom = this.computeZoomFromBounds(truckBounds);
                     
-                    google.maps.event.addListenerOnce(this.map, 'idle', () => {
-                        const currentZoom = this.map.getZoom();
-                        if (currentZoom > settings.viewport.maxZoom) {
-                            this.map.setZoom(settings.viewport.maxZoom);
-                        }
-                    });
-                }
-                // Zoom in: only if trucks are too small (< 40% of screen) AND cooldown expired
-                else if (coverageRatio < (targetRatio - hysteresis) && now - this.lastZoomInTime > this.zoomInCooldownMs) {
-                    this.map.fitBounds(truckBounds, settings.viewport.padding);
+                    // Smooth pan to center
+                    this.map.panTo(targetCenter);
+                    
+                    // Smooth zoom animation
+                    const startZoom = this.map.getZoom();
+                    const endZoom = Math.min(targetZoom, settings.viewport.maxZoom);
+                    const zoomDiff = endZoom - startZoom;
+                    
+                    if (Math.abs(zoomDiff) > 0.5) {
+                        const duration = settings.viewport.panDurationMs;
+                        const startTime = performance.now();
+                        
+                        const animateZoom = (timestamp) => {
+                            const elapsed = timestamp - startTime;
+                            const progress = Math.min(elapsed / duration, 1);
+                            const easedProgress = progress * (2 - progress); // Ease out
+                            const currentZoom = startZoom + (zoomDiff * easedProgress);
+                            
+                            this.map.setZoom(Math.round(currentZoom));
+                            
+                            if (progress < 1) {
+                                requestAnimationFrame(animateZoom);
+                            }
+                        };
+                        
+                        requestAnimationFrame(animateZoom);
+                    }
+                    
                     this.lastZoomInTime = now;
-                    
-                    google.maps.event.addListenerOnce(this.map, 'idle', () => {
-                        const currentZoom = this.map.getZoom();
-                        if (currentZoom > settings.viewport.maxZoom) {
-                            this.map.setZoom(settings.viewport.maxZoom);
-                        }
-                    });
                 }
             }
-            // Single vehicle: no forced viewport updates (avoid flash from tile reloads)
 
             this.lastViewportUpdate = now;
         }
