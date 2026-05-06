@@ -531,22 +531,20 @@ function Animation()
 		{
 			return;
 		}
-		var dblCosAng = Math.cos( intAngle );
-		var dblSinAng = Math.sin( intAngle );
 		var objCanvas = objVehicle.getCanvasContext();
 		objCanvas.clearRect( 0 , 0 , 32 , 32 );
-		objCanvas.save();
-		objCanvas.rotate( intAngle );
 
-		objCanvas.translate(
-			16 * dblSinAng + 16 * dblCosAng , 
-			16 * dblCosAng - 16 * dblSinAng
-		);
+		// Use top-down sprite when vehicle is stopped
+		if( objVehicle.objVehicleImage.objImageTopDown && objVehicle.intSpeed <= 0 )
+		{
+			objCanvas.drawImage( objVehicle.objVehicleImage.objImageTopDown , 0 , 0 , 32 , 32 );
+			return;
+		}
 
 		var intQtdImages = 8;
 		var intAngleArea = 2 * Math.PI / intQtdImages;
 		var intImage = Math.round( intAngle  / intAngleArea );
-		
+
 		var objImage;
 		switch( intImage )
 		{
@@ -596,9 +594,9 @@ function Animation()
 				throw new Error( "Invalid Angle " + intAngle );
 			}
 		}
-		
-		objCanvas.drawImage( objImage , -16 , -16 );
-		objCanvas.restore();		
+
+		// Sprites are already oriented correctly, no rotation needed
+		objCanvas.drawImage( objImage , 0 , 0 , 32 , 32 );
 	}
 
 	/**
@@ -764,6 +762,13 @@ function VehicleImage()
 	 */
 	this.objImageBottomRight;
 
+	/**
+	 * Html Image Top-Down View (center sprite)
+	 *
+	 * @Image
+	 */
+	this.objImageTopDown;
+
 
 	this.loadSimple = function( strImage )
 	{
@@ -821,9 +826,59 @@ function VehicleImage()
 		this.objImageBottomLeft.height = 32;
 
 		this.objImageBottomRight = new Image();
-          	this.objImageBottomRight.src = this.strPathImages + "bottom_right.png";
+        	this.objImageBottomRight.src = this.strPathImages + "bottom_right.png";
 		this.objImageBottomRight.width = 32;
 		this.objImageBottomRight.height = 32;
+	}
+
+	this.loadTruck = function( strColor )
+	{
+		this.strPathImages = "./images/trucks/";
+
+		this.objImageTop = new Image();
+		this.objImageTop.src = this.strPathImages + strColor + "-top.png";
+		this.objImageTop.width = 32;
+		this.objImageTop.height = 32;
+
+		this.objImageBottom = new Image();
+		this.objImageBottom.src = this.strPathImages + strColor + "-bottom.png";
+		this.objImageBottom.width = 32;
+		this.objImageBottom.height = 32;
+
+		this.objImageLeft = new Image();
+		this.objImageLeft.src = this.strPathImages + strColor + "-left.png";
+		this.objImageLeft.width = 32;
+		this.objImageLeft.height = 32;
+
+		this.objImageRight = new Image();
+		this.objImageRight.src = this.strPathImages + strColor + "-right.png";
+		this.objImageRight.width = 32;
+		this.objImageRight.height = 32;
+
+		this.objImageTopLeft = new Image();
+		this.objImageTopLeft.src = this.strPathImages + strColor + "-top-left.png";
+		this.objImageTopLeft.width = 32;
+		this.objImageTopLeft.height = 32;
+
+		this.objImageTopRight = new Image();
+		this.objImageTopRight.src = this.strPathImages + strColor + "-top-right.png";
+		this.objImageTopRight.width = 32;
+		this.objImageTopRight.height = 32;
+
+		this.objImageBottomLeft = new Image();
+		this.objImageBottomLeft.src = this.strPathImages + strColor + "-bottom-left.png";
+		this.objImageBottomLeft.width = 32;
+		this.objImageBottomLeft.height = 32;
+
+		this.objImageBottomRight = new Image();
+		this.objImageBottomRight.src = this.strPathImages + strColor + "-bottom-right.png";
+		this.objImageBottomRight.width = 32;
+		this.objImageBottomRight.height = 32;
+
+		this.objImageTopDown = new Image();
+		this.objImageTopDown.src = this.strPathImages + strColor + "-middle.png";
+		this.objImageTopDown.width = 32;
+		this.objImageTopDown.height = 32;
 	}
 }
 
@@ -1597,7 +1652,7 @@ function FlightPlan( objPlane )
 function test( intQtdCars, intQtdPlanes , booDrawMarkes , booDrawFullPath )
 {
 	window.objCarImage = new VehicleImage();
-	window.objCarImage.loadComplete();
+	window.objCarImage.loadTruck("red");
 
 	window.objPlaneImage = new VehicleImage();
 	window.objPlaneImage.loadSimple( "plane.png" );

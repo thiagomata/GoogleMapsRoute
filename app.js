@@ -46,42 +46,18 @@ class Vehicle {
         this.canvas = document.createElement('canvas');
         this.canvas.width = 64;
         this.canvas.height = 64;
-        this.sprites = {};
-        this.spriteNames = ['top', 'top_right', 'right', 'bottom_right', 'bottom', 'bottom_left', 'left', 'top_left'];
-        this.currentSpriteName = null;
-        this.ready = false;
-
-        // 8 directional sprites — all images point UP (North)
-        this.sprites = {};
-        this.spriteNames = [
-            'top', 'top_right', 'right', 'bottom_right',
-            'bottom', 'bottom_left', 'left', 'top_left'
-        ];
-        this.canvas = document.createElement('canvas');
-        this.canvas.width = 64;
-        this.canvas.height = 64;
+        this.sprites = []; // Array of {angle, img} objects
+        this.spriteAngles = [0, 22.5, 45, 67.5, 90, 135, 180, 225, 270, 292.5, 315, 337.5];
         this.topDownSprite = null;
+        this.currentSpriteAngle = null;
+        this.ready = false;
     }
 
     async loadSprites() {
-        if (Object.keys(this.sprites).length > 0) return;
+        if (this.topDownSprite && this.sprites.length > 0) return;
 
-        const promises = this.spriteNames.map(name => {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                // Convert sprite name to filename format (e.g., top_left → top-left)
-                const filename = name.replace('_', '-');
-                img.src = `images/trucks/red-${filename}.png`;
-                img.onload = () => {
-                    this.sprites[name] = img;
-                    resolve();
-                };
-            });
-        });
-
-        // Load top-down center sprite (red-middle.png)
-        const topDownPromise = new Promise((resolve) => {
+        // Load top-down sprite for stopped state
+        await new Promise((resolve) => {
             const img = new Image();
             img.crossOrigin = 'anonymous';
             img.src = 'images/trucks/red-middle.png';
@@ -91,7 +67,20 @@ class Vehicle {
             };
         });
 
-        await Promise.all([...promises, topDownPromise]);
+        // Load sprites into array with angle & image
+        const promises = this.spriteAngles.map(angle => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.src = `images/trucks/red-${angle}.png`;
+                img.onload = () => {
+                    this.sprites.push({ angle, img });
+                    resolve();
+                };
+            });
+        });
+
+        await Promise.all(promises);
     }
 
     async fetchRoute(origin, destination) {
@@ -165,34 +154,48 @@ class Vehicle {
         this.ready = true;
     }
 
-    getSpriteName(bearing) {
-        bearing = (bearing + 360) % 360;
-        const index = Math.round(bearing / 45) % 8;
-        return this.spriteNames[index];
-    }
-
     updateSprite(bearing) {
-        const spriteName = this.getSpriteName(bearing);
+        // Normalize bearing to 0-360°
+        bearing = (bearing + 360) % 360;
 
-        // Only redraw if sprite changed
-        if (spriteName === this.currentSpriteName) return;
-        this.currentSpriteName = spriteName;
+        // Find nearest sprite from array
+        let nearestEntry = this.sprites[0];
+        let minDiff = 360;
 
-        const img = this.sprites[spriteName];
-        if (!img) return;
+        for (const entry of this.sprites) {
+            let diff = Math.abs(bearing - entry.angle);
+            if (diff > 180) diff = 360 - diff; // Handle angular wrap
+            if (diff < minDiff) {
+                minDiff = diff;
+                nearestEntry = entry;
+            }
+        }
+
+        // Only update icon if sprite changed
+        if (nearestEntry.angle !== this.currentSpriteAngle) {
+            this.currentSpriteAngle = nearestEntry.angle;
+        }
+
+
+
+        if (!nearestEntry || !nearestEntry.img) return;
 
         const ctx = this.canvas.getContext('2d');
         ctx.clearRect(0, 0, 64, 64);
-        // Sprites are already oriented correctly, no rotation needed
-        ctx.drawImage(img, 0, 0, 64, 64);
 
-        // Update marker icon only if marker exists
-        if (this.marker) {
-            this.marker.setIcon({
-                url: this.canvas.toDataURL(),
-                scaledSize: new google.maps.Size(64, 64),
-                anchor: new google.maps.Point(32, 32)
-            });
+        // Sprites are pre-oriented - no rotation needed
+        ctx.drawImage(nearestEntry.img, 0, 0, 64, 64);
+
+        // Only update icon if sprite changed
+        if (nearestEntry.angle !== this.currentSpriteAngle) {
+            this.currentSpriteAngle = nearestEntry.angle;
+            if (this.marker) {
+                this.marker.setIcon({
+                    url: this.canvas.toDataURL(),
+                    scaledSize: new google.maps.Size(64, 64),
+                    anchor: new google.maps.Point(32, 32)
+                });
+            }
         }
     }
 
