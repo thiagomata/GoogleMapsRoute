@@ -60,6 +60,7 @@ class Vehicle {
         this.canvas = document.createElement('canvas');
         this.canvas.width = 64;
         this.canvas.height = 64;
+        this.topDownSprite = null;
     }
 
     async loadSprites() {
@@ -69,14 +70,28 @@ class Vehicle {
             return new Promise((resolve) => {
                 const img = new Image();
                 img.crossOrigin = 'anonymous';
-                img.src = `images/${name}.png`;
+                // Convert sprite name to filename format (e.g., top_left → top-left)
+                const filename = name.replace('_', '-');
+                img.src = `images/trucks/red-${filename}.png`;
                 img.onload = () => {
                     this.sprites[name] = img;
                     resolve();
                 };
             });
         });
-        await Promise.all(promises);
+
+        // Load top-down center sprite (red-middle.png)
+        const topDownPromise = new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.src = 'images/trucks/red-middle.png';
+            img.onload = () => {
+                this.topDownSprite = img;
+                resolve();
+            };
+        });
+
+        await Promise.all([...promises, topDownPromise]);
     }
 
     async fetchRoute(origin, destination) {
@@ -168,11 +183,8 @@ class Vehicle {
 
         const ctx = this.canvas.getContext('2d');
         ctx.clearRect(0, 0, 64, 64);
-        ctx.save();
-        ctx.translate(32, 32);
-        ctx.rotate(bearing * Math.PI / 180);
-        ctx.drawImage(img, -32, -32, 64, 64);
-        ctx.restore();
+        // Sprites are already oriented correctly, no rotation needed
+        ctx.drawImage(img, 0, 0, 64, 64);
 
         // Update marker icon only if marker exists
         if (this.marker) {
