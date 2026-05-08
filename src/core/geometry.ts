@@ -130,6 +130,52 @@ export function totalDistance(path: LatLng[]): number {
   return total
 }
 
+export function cumulativeDistances(path: LatLng[]): number[] {
+  const result: number[] = [0]
+  for (let i = 0; i < path.length - 1; i++) {
+    result.push(result[result.length - 1] + haversineDistance(path[i], path[i + 1]))
+  }
+  return result
+}
+
+export function splitPathAt(
+  path: LatLng[],
+  cumDists: number[],
+  distanceMeters: number,
+  startIndex: number,
+): { traveled: LatLng[]; remaining: LatLng[]; splitIndex: number } {
+  if (path.length < 2 || distanceMeters <= 0) {
+    return { traveled: [path[0]], remaining: [...path], splitIndex: 0 }
+  }
+
+  let i = Math.max(0, Math.min(startIndex, cumDists.length - 2))
+  for (; i < cumDists.length - 1; i++) {
+    if (cumDists[i + 1] >= distanceMeters) break
+  }
+
+  if (i >= cumDists.length - 1) {
+    for (i = 0; i < cumDists.length - 1; i++) {
+      if (cumDists[i + 1] >= distanceMeters) break
+    }
+    if (i >= cumDists.length - 1) {
+      return {
+        traveled: [...path],
+        remaining: [path[path.length - 1]],
+        splitIndex: cumDists.length - 2,
+      }
+    }
+  }
+
+  const segmentLen = cumDists[i + 1] - cumDists[i]
+  const fraction = segmentLen === 0 ? 0 : (distanceMeters - cumDists[i]) / segmentLen
+  const point = interpolate(path[i], path[i + 1], fraction)
+  const traveled = [...path.slice(0, i + 1), point]
+  const remaining = fraction >= 1
+    ? path.slice(i + 1)
+    : [point, ...path.slice(i + 1)]
+  return { traveled, remaining, splitIndex: i }
+}
+
 export function latLngBounds(points: LatLng[]): { center: LatLng; zoom: number } | null {
   if (points.length === 0) return null
 

@@ -6,6 +6,8 @@ import {
   interpolate,
   pointAtDistance,
   totalDistance,
+  cumulativeDistances,
+  splitPathAt,
   latLngBounds,
 } from '../../src/core/geometry'
 import type { LatLng } from '../../src/core/geometry'
@@ -123,6 +125,73 @@ describe('totalDistance', () => {
     const d1 = haversineDistance(path[0], path[1])
     const d2 = haversineDistance(path[1], path[2])
     expect(totalDistance(path)).toBeCloseTo(d1 + d2, 0)
+  })
+})
+
+describe('cumulativeDistances', () => {
+  it('returns [0] for single-point path', () => {
+    expect(cumulativeDistances([{ lat: 0, lng: 0 }])).toEqual([0])
+  })
+
+  it('returns correct distances for multi-point path', () => {
+    const path: LatLng[] = [
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 1 },
+      { lat: 0, lng: 2 },
+    ]
+    const d1 = haversineDistance(path[0], path[1])
+    const d2 = haversineDistance(path[1], path[2])
+    const result = cumulativeDistances(path)
+    expect(result).toHaveLength(3)
+    expect(result[0]).toBe(0)
+    expect(result[1]).toBeCloseTo(d1, 0)
+    expect(result[2]).toBeCloseTo(d1 + d2, 0)
+  })
+})
+
+describe('splitPathAt', () => {
+  const path: LatLng[] = [
+    { lat: 0, lng: 0 },
+    { lat: 0, lng: 1 },
+    { lat: 0, lng: 2 },
+  ]
+  const cumDists = cumulativeDistances(path)
+
+  it('returns full path as remaining at distance 0', () => {
+    const result = splitPathAt(path, cumDists, 0, 0)
+    expect(result.traveled).toHaveLength(1)
+    expect(result.traveled[0]).toEqual({ lat: 0, lng: 0 })
+    expect(result.remaining).toHaveLength(3)
+    expect(result.splitIndex).toBe(0)
+  })
+
+  it('splits at midpoint', () => {
+    const halfTotal = cumDists[2] / 2
+    const result = splitPathAt(path, cumDists, halfTotal, 0)
+    expect(result.traveled.length).toBeGreaterThan(1)
+    expect(result.remaining.length).toBeGreaterThan(1)
+    expect(result.traveled[result.traveled.length - 1]).toEqual(result.remaining[0])
+  })
+
+  it('returns full path as traveled at total distance', () => {
+    const result = splitPathAt(path, cumDists, cumDists[2], 0)
+    expect(result.traveled).toHaveLength(3)
+    expect(result.remaining).toHaveLength(1)
+    expect(result.remaining[0]).toEqual(path[2])
+  })
+
+  it('walks forward from startIndex', () => {
+    const result = splitPathAt(path, cumDists, cumDists[1], 0)
+    expect(result.splitIndex).toBe(0)
+    const result2 = splitPathAt(path, cumDists, cumDists[1] + 1, result.splitIndex)
+    expect(result2.splitIndex).toBeGreaterThanOrEqual(0)
+  })
+
+  it('handles single-point path', () => {
+    const single: LatLng[] = [{ lat: 1, lng: 1 }]
+    const result = splitPathAt(single, [0], 0, 0)
+    expect(result.traveled).toHaveLength(1)
+    expect(result.remaining).toHaveLength(1)
   })
 })
 

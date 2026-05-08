@@ -32,6 +32,7 @@ export interface IMapAdapter {
     strokeColor: string
     strokeWeight: number
     strokeOpacity: number
+    zIndex?: number
   }): MapPolyline
 
   setViewport(viewport: ViewportUpdate): void

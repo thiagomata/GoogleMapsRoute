@@ -54,7 +54,7 @@ export class Fleet {
     const states = this.getAllStates(now)
     const allArrived = this.allArrived(now)
 
-    console.log('[Fleet]', 'Tick:', now, 'vehicles:', states.length, 'allArrived:', allArrived)
+    // console.log('[Fleet]', 'Tick:', now, 'vehicles:', states.length, 'allArrived:', allArrived)
 
     states.forEach((state) => {
       this.bus.emit('vehicle:update', {

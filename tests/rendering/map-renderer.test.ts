@@ -89,7 +89,7 @@ describe('MapRenderer', () => {
     expect(marker.isVisible()).toBe(true)
   })
 
-  it('updates traveled path on vehicle update', async () => {
+  it('updates both traveled and remaining paths on vehicle update', async () => {
     const { MapRenderer } = await import('../../src/rendering/map-renderer')
     const renderer = new MapRenderer(bus, adapter, { spriteBasePath: 'test-sprites' })
     vi.spyOn(renderer, 'initialize').mockResolvedValue(undefined)
@@ -101,11 +101,20 @@ describe('MapRenderer', () => {
       vehicleId: 'v1',
       position: simplePath[0],
       bearing: 0,
-      distanceTraveled: 500,
+      distanceTraveled: 100,
       status: 'moving',
     })
 
     expect(adapter.polylines.length).toBe(2)
+    const [remainingPoly, traveledPoly] = adapter.polylines
+
+    const traveledPath = traveledPoly.getPath()
+    expect(traveledPath.length).toBe(2)
+    expect(traveledPath[0]).toEqual(simplePath[0])
+
+    const remainingPath = remainingPoly.getPath()
+    expect(remainingPath.length).toBe(2)
+    expect(remainingPath[1]).toEqual(simplePath[1])
   })
 
   it('handles fitBounds event', async () => {

@@ -90,7 +90,7 @@ export class MockMapAdapter implements IMapAdapter {
     return marker
   }
 
-  createPolyline(options: { path: LatLng[] }): MapPolyline {
+  createPolyline(options: { path: LatLng[]; zIndex?: number }): MapPolyline {
     const polyline = new MockMapPolyline(options)
     this.polylines.push(polyline)
     return polyline

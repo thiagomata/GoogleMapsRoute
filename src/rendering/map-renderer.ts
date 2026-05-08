@@ -1,4 +1,5 @@
 import type { LatLng } from '../core/geometry'
+import { cumulativeDistances, splitPathAt } from '../core/geometry'
 import type { EventBus } from '../core/events'
 import type { IMapAdapter, MapMarker, MapPolyline } from '../services/map-adapter'
 import { SpriteLoader } from './sprite-loader'
@@ -7,9 +8,12 @@ import { getSpriteUrl } from './sprite-canvas'
 interface VehicleRenderState {
   marker: MapMarker
   traveledPath: MapPolyline
-  fullPath: MapPolyline
+  remainingPath: MapPolyline
   lastBearing: number
   spriteBasePath: string
+  path: LatLng[]
+  cumulativeDistances: number[]
+  currentSplitIndex: number
 }
 
 export interface MapRendererConfig {
@@ -34,7 +38,6 @@ export class MapRenderer {
   private config: MapRendererConfig
   private spriteLoader: SpriteLoader
   private vehicles: Map<string, VehicleRenderState> = new Map()
-  private vehiclePaths: Map<string, LatLng[]> = new Map()
 
   constructor(bus: EventBus, adapter: IMapAdapter, config: Partial<MapRendererConfig> = {}) {
     this.bus = bus
@@ -65,17 +68,16 @@ export class MapRenderer {
 
   addVehicle(id: string, path: LatLng[], spriteBasePath?: string): void {
     console.log('[MapRenderer]', 'Adding vehicle', id, 'with', path.length, 'points')
-    this.vehiclePaths.set(id, path)
     const vehicleSpritePath = spriteBasePath || this.config.spriteBasePath
-
-    // Extract color from spriteBasePath (e.g., 'images/trucks/red_360' -> '#FF0000')
     const color = this.getColorFromPath(vehicleSpritePath)
+    const cumDists = cumulativeDistances(path)
 
-    const fullPath = this.adapter.createPolyline({
+    const remainingPath = this.adapter.createPolyline({
       path,
       strokeColor: color,
       strokeWeight: this.config.strokeWidth,
-      strokeOpacity: 0.6,
+      strokeOpacity: 1,
+      zIndex: 2,
     })
 
     const traveledPath = this.adapter.createPolyline({
@@ -83,6 +85,7 @@ export class MapRenderer {
       strokeColor: '#FFFFFF',
       strokeWeight: this.config.strokeWidth,
       strokeOpacity: 1,
+      zIndex: 1,
     })
 
     const initialSprite = `${vehicleSpritePath}/0.png`
@@ -104,9 +107,12 @@ export class MapRenderer {
     this.vehicles.set(id, {
       marker,
       traveledPath,
-      fullPath,
+      remainingPath,
       lastBearing: 0,
       spriteBasePath: vehicleSpritePath,
+      path,
+      cumulativeDistances: cumDists,
+      currentSplitIndex: 0,
     })
   }
 
@@ -124,17 +130,15 @@ export class MapRenderer {
     const distanceTraveled = payload.distanceTraveled as number
     const status = payload.status as string
 
-    console.log('[MapRenderer]', 'Handling update for', vehicleId, 'status:', status)
+    // console.log('[MapRenderer]', 'Handling update for', vehicleId, 'status:', status)
 
     const state = this.vehicles.get(vehicleId)
-    const path = this.vehiclePaths.get(vehicleId)
-    if (!state || !path) {
+    if (!state) {
       console.warn('[MapRenderer]', 'Vehicle', vehicleId, 'not found in renderer')
       return
     }
 
     state.marker.setPosition(position)
-    console.log('[MapRenderer]', 'Updated position for', vehicleId)
 
     const roundedBearing = Math.round(bearing / 5) * 5 % 360
     if (roundedBearing !== state.lastBearing) {
@@ -148,61 +152,26 @@ export class MapRenderer {
         ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
         const icon = canvas.toDataURL()
         state.marker.setIcon(icon)
-        console.log('[MapRenderer]', 'Updated sprite for', vehicleId, 'bearing:', roundedBearing)
+        console.log('[MapRenderer]', 'Updated sprite for', vehicleId, 'bearing:', roundedBearing, bearing)
       }
       state.lastBearing = roundedBearing
     }
 
     if (distanceTraveled !== undefined) {
-      const traveledPath = this.getPointsAtDistance(path, distanceTraveled)
-      state.traveledPath.setPath(traveledPath)
+      const { traveled, remaining, splitIndex } = splitPathAt(
+        state.path,
+        state.cumulativeDistances,
+        distanceTraveled,
+        state.currentSplitIndex,
+      )
+      state.currentSplitIndex = splitIndex
+      state.traveledPath.setPath(traveled)
+      state.remainingPath.setPath(remaining)
     }
 
     if (status === 'arrived') {
       console.log('[MapRenderer]', 'Vehicle', vehicleId, 'arrived')
     }
-  }
-
-  private getPointsAtDistance(path: LatLng[], distanceMeters: number): LatLng[] {
-    if (path.length < 2) return path
-
-    const result: LatLng[] = [path[0]]
-    let traveled = 0
-
-    for (let i = 0; i < path.length - 1; i++) {
-      const segmentDist = this.haversineDistance(path[i], path[i + 1])
-
-      if (traveled + segmentDist >= distanceMeters) {
-        const remaining = distanceMeters - traveled
-        const fraction = segmentDist === 0 ? 0 : remaining / segmentDist
-        const point = {
-          lat: path[i].lat + (path[i + 1].lat - path[i].lat) * fraction,
-          lng: path[i].lng + (path[i + 1].lng - path[i].lng) * fraction,
-        }
-        result.push(point)
-        return result
-      }
-
-      result.push(path[i + 1])
-      traveled += segmentDist
-    }
-
-    return result
-  }
-
-  private haversineDistance(a: LatLng, b: LatLng): number {
-    const R = 6371000
-    const toRad = (d: number) => (d * Math.PI) / 180
-    const dLat = toRad(b.lat - a.lat)
-    const dLng = toRad(b.lng - a.lng)
-    const lat1 = toRad(a.lat)
-    const lat2 = toRad(b.lat)
-
-    const x =
-      Math.sin(dLat / 2) ** 2 +
-      Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2)
-
-    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
   }
 
   handleFitBounds(points: LatLng[]): void {

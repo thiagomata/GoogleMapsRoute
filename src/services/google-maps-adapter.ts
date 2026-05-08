@@ -43,7 +43,7 @@ class GooglePolyline implements MapPolyline {
   private polyline: google.maps.Polyline
 
   constructor(
-    options: { path: LatLng[]; strokeColor: string; strokeWeight: number; strokeOpacity: number },
+    options: { path: LatLng[]; strokeColor: string; strokeWeight: number; strokeOpacity: number; zIndex?: number },
     map: google.maps.Map,
   ) {
     this.polyline = new google.maps.Polyline({
@@ -51,6 +51,7 @@ class GooglePolyline implements MapPolyline {
       strokeColor: options.strokeColor,
       strokeWeight: options.strokeWeight,
       strokeOpacity: options.strokeOpacity,
+      zIndex: options.zIndex,
       map,
     })
   }
@@ -97,7 +98,7 @@ export class GoogleMapsAdapter implements IMapAdapter {
     return new GoogleMarker(options, this.map)
   }
 
-  createPolyline(options: { path: LatLng[]; strokeColor: string; strokeWeight: number; strokeOpacity: number }): MapPolyline {
+  createPolyline(options: { path: LatLng[]; strokeColor: string; strokeWeight: number; strokeOpacity: number; zIndex?: number }): MapPolyline {
     if (!this.map) throw new Error('Map not initialized')
     console.log('[GoogleMapsAdapter]', 'Creating polyline with', options.path.length, 'points, color:', options.strokeColor)
     return new GooglePolyline(options, this.map)

@@ -7,6 +7,21 @@ import { MockMapAdapter } from '../rendering/mock-map-adapter'
 import { MockRouteProvider, createTestRoute } from '../services/mock-route-provider'
 import type { LatLng } from '../../src/core/geometry'
 
+vi.mock('../../src/rendering/sprite-loader', () => {
+  function fakeImage(): HTMLImageElement {
+    return { width: 64, height: 64 } as unknown as HTMLImageElement
+  }
+  return {
+    SpriteLoader: vi.fn().mockImplementation(() => ({
+      load: vi.fn().mockResolvedValue(fakeImage()),
+      loadAll: vi.fn().mockResolvedValue(undefined),
+      getCached: vi.fn(() => fakeImage()),
+      getCacheSize: vi.fn(() => 1),
+      clear: vi.fn(),
+    })),
+  }
+})
+
 describe('Integration: full app flow', () => {
   let bus: EventBus
   let mapAdapter: MockMapAdapter
@@ -14,14 +29,6 @@ describe('Integration: full app flow', () => {
   let renderer: MapRenderer
 
   const sydneyCenter: LatLng = { lat: -33.8688, lng: 151.2093 }
-
-  function createFakeImage(): HTMLImageElement {
-    const img = new Image()
-    Object.defineProperty(img, 'width', { value: 64, configurable: true })
-    Object.defineProperty(img, 'height', { value: 64, configurable: true })
-    Object.defineProperty(img, 'complete', { value: true, configurable: true })
-    return img
-  }
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -39,17 +46,11 @@ describe('Integration: full app flow', () => {
     renderer = new MapRenderer(bus, mapAdapter, {
       spriteBasePath: 'test-sprites',
     })
-
-    vi.spyOn(renderer, 'initialize').mockImplementation(async () => {
-      const spriteLoader = (renderer as any).spriteLoader
-      const spriteUrl = 'test-sprites-middle.png'
-      spriteLoader.cache.set(spriteUrl, createFakeImage())
-    })
   })
 
   afterEach(() => {
     vi.useRealTimers()
-    vi.restoreAllMocks()
+    vi.clearAllMocks()
   })
 
   it('creates vehicles, starts animation, and camera updates', async () => {

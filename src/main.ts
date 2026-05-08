@@ -140,7 +140,7 @@ async function main() {
   })
 
   bus.on('vehicle:update', (event) => {
-    console.log(LOG_PREFIX, `Vehicle update: ${event.payload.vehicleId} at (${(event.payload.position as LatLng)?.lat.toFixed(4)}, ${(event.payload.position as LatLng)?.lng.toFixed(4)}) status=${event.payload.status}`)
+    // console.log(LOG_PREFIX, `Vehicle update: ${event.payload.vehicleId} at (${(event.payload.position as LatLng)?.lat.toFixed(4)}, ${(event.payload.position as LatLng)?.lng.toFixed(4)}) status=${event.payload.status}`)
   })
 
   console.log(LOG_PREFIX, 'App ready. Click "Go!" to start.')
