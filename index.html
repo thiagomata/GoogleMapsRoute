@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Traveling in Google Maps</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    #controls {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 1000;
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      min-width: 200px;
+    }
+
+    #intro {
+      font-size: 12px;
+      color: #555;
+      line-height: 1.5;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    #intro a {
+      color: #4285f4;
+      text-decoration: none;
+    }
+
+    #intro a:hover {
+      text-decoration: underline;
+    }
+
+    #intro .author {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #888;
+    }
+
+    #controls h2 {
+      margin-bottom: 12px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    #controls button {
+      width: 100%;
+      padding: 8px 16px;
+      background: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    #controls button:hover {
+      background: #3367d6;
+    }
+
+    #controls button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    #status {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .error {
+      color: #d93025 !important;
+    }
+
+    .speed-control {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #333;
+    }
+
+    .speed-control label {
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .speed-control input[type="range"] {
+      flex: 1;
+      accent-color: #4285f4;
+    }
+
+    .speed-control .speed-value {
+      font-weight: 600;
+      min-width: 32px;
+      text-align: right;
+      color: #4285f4;
+    }
+  </style>
+  <script type="module" crossorigin src="/GoogleMapsRoute/assets/index-CSTF3MCN.js"></script>
+</head>
+<body>
+  <div id="controls">
+    <div id="intro">
+      Inspired by <a href="http://econym.org.uk/gmap/example_cartrip3.htm">car trip</a>,
+      a small <a href="https://github.com/thiagomata/GoogleMapsRoute">project</a>
+      exploring the Google Maps API with multiple moving vehicles.
+      <div class="author">by <a href="https://twitter.com/#!/ThiagoMata">Thiago Mata</a></div>
+    </div>
+    <h2>Vehicle Tracker</h2>
+    <button id="go-btn">Go!</button>
+    <div class="speed-control">
+      <label for="speed-slider">Speed</label>
+      <input type="range" id="speed-slider" min="0.5" max="50" step="0.5" value="1" />
+      <span class="speed-value" id="speed-display">1x</span>
+    </div>
+    <div class="speed-control">
+      <label for="progress-slider">Progress</label>
+      <input type="range" id="progress-slider" min="0" max="1" step="0.001" value="0" disabled />
+      <span class="speed-value" id="progress-display">0%</span>
+    </div>
+    <div id="status">Ready</div>
+  </div>
+  <div id="map"></div>
+
+</body>
+</html>
