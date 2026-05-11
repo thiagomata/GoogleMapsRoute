@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Old PNG vs Blender Renders</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .comparison-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .image-pair {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .image-pair h3 {
+            margin: 0 0 10px 0;
+            color: #555;
+            font-size: 14px;
+        }
+        .images {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+        .old img, .new img {
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+        .old {
+            opacity: 0.8;
+        }
+        .new img {
+            border: 2px solid #4CAF50;
+        }
+        .label {
+            font-size: 11px;
+            color: #777;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Old PNG (32x32) vs Blender Renders (256x256)</h1>
+
+    <div class="comparison-container" id="comparison">
+        <!-- Images will be inserted here by JavaScript -->
+    </div>
+
+    <script>
+        const images = ['top', 'top_right', 'right', 'bottom_right', 'bottom', 'bottom_left', 'left', 'top_left'];
+        
+        const container = document.getElementById('comparison');
+
+        images.forEach(name => {
+            const pair = document.createElement('div');
+            pair.className = 'image-pair';
+            
+            pair.innerHTML = `
+                <h3>${name.replace('_', ' ').toUpperCase()}</h3>
+                <div class="images">
+                    <div class="old">
+                        <img src="images/${name}.png" width="64" height="64" alt="Old ${name}">
+                        <div class="label">Old PNG (32x32)</div>
+                    </div>
+                    <div class="new">
+                        <img src="images/renders/${name}.png" width="64" height="64" alt="New ${name}">
+                        <div class="label">Blender (256x256)</div>
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(pair);
+        });
+    </script>
+</body>
+</html>
