@@ -147,11 +147,21 @@ async function main() {
     adapter.setViewport(event.payload as { center: LatLng; zoom: number })
   })
 
-  bus.on('fleet:positions', () => {
+  bus.on('fleet:positions', (event) => {
     if (!progressSlider.disabled) {
       const p = fleet.getOverallProgress()
       progressSlider.value = String(p)
       progressDisplay.textContent = `${(p * 100).toFixed(1)}%`
+    }
+
+    const states = event.payload.states as Array<{ status: string }> | undefined
+    if (states) {
+      const total = states.length
+      const arrived = states.filter((s) => s.status === 'arrived').length
+      const moving = total - arrived
+      statusEl.textContent = moving > 0
+        ? `${arrived}/${total} arrived, ${moving} moving...`
+        : `${arrived}/${total} arrived`
     }
   })
 
