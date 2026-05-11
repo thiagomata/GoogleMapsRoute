@@ -111,8 +111,6 @@ Required APIs (enable in Google Cloud Console):
 - **Maps JavaScript API** (28,000 free loads/month)
 - **Directions API** (40,000 free requests/month)
 
-See [docs/GOOGLE_MAPS_SETUP.md](docs/GOOGLE_MAPS_SETUP.md) for detailed setup instructions.
-
 ## Credits
 
 Inspired by the code from econym.org.uk. Created by [Thiago Mata](https://twitter.com/#!/ThiagoMata).
