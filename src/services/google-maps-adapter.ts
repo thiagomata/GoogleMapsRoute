@@ -107,8 +107,10 @@ export class GoogleMapsAdapter implements IMapAdapter {
   setViewport(viewport: ViewportUpdate): void {
     if (!this.map) return
     console.log('[GoogleMapsAdapter]', 'Setting viewport to', viewport.center, 'zoom:', viewport.zoom)
+    if (viewport.zoom !== undefined && viewport.zoom !== this.map.getZoom()) {
+      this.map.setZoom(viewport.zoom)
+    }
     this.map.panTo(viewport.center)
-    this.map.setZoom(viewport.zoom)
   }
 
   fitBounds(points: LatLng[]): void {

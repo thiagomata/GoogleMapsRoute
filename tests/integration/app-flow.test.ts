@@ -75,8 +75,7 @@ describe('Integration: full app flow', () => {
     fleet.addVehicle({
       id: 'v1',
       path: rawRoute.path,
-      speedMetersPerSecond: 50,
-    })
+    }, 50)
 
     renderer.addVehicle('v1', rawRoute.path)
 
@@ -147,8 +146,7 @@ describe('Integration: full app flow', () => {
     fleet.addVehicle({
       id: 'v1',
       path: rawRoute.path,
-      speedMetersPerSecond: 100,
-    })
+    }, 100)
 
     renderer.addVehicle('v1', rawRoute.path)
 
@@ -178,12 +176,11 @@ describe('Integration: full app flow', () => {
     fleet.addVehicle({
       id: 'v2',
       path: fastRawRoute.path,
-      speedMetersPerSecond: 100,
-      startDelayMs: 0,
-    })
+    }, 100)
 
     renderer.addVehicle('v2', fastRawRoute.path)
 
+    fleet.setSpeedMultiplier(100)
     fleet.startAll(baseTime)
 
     vi.advanceTimersByTime(5000)
@@ -213,8 +210,7 @@ describe('Integration: full app flow', () => {
     fleet.addVehicle({
       id: 'v1',
       path: rawRoute.path,
-      speedMetersPerSecond: 100,
-    })
+    }, 100)
 
     renderer.addVehicle('v1', rawRoute.path)
 

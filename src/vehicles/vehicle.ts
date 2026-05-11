@@ -3,9 +3,8 @@ import type { LatLng } from '../core/geometry'
 export interface VehicleOptions {
   id: string
   path: LatLng[]
-  speedMetersPerSecond: number
-  startDelayMs?: number
   spriteBasePath?: string
+  startProgress?: number
 }
 
 export type VehicleStatus = 'waiting' | 'moving' | 'arrived'
@@ -22,64 +21,23 @@ export interface VehicleStateEvent {
 
 export class Vehicle {
   readonly id: string
+  readonly startProgress: number
   private path: LatLng[]
-  private speed: number
-  private startDelay: number
-  private status: VehicleStatus = 'waiting'
-  private startTime: number | null = null
   private totalDistance: number
-  private speedMultiplier: number = 1
 
   constructor(options: VehicleOptions) {
     this.id = options.id
     this.path = options.path
-    this.speed = options.speedMetersPerSecond
-    this.startDelay = options.startDelayMs ?? 0
     this.totalDistance = this.calculateTotalDistance()
+    this.startProgress = options.startProgress ?? 0
   }
 
-  setSpeedMultiplier(multiplier: number): void {
-    this.speedMultiplier = Math.max(0.1, multiplier)
-  }
-
-  start(referenceTime?: number): void {
-    this.status = 'waiting'
-    this.startTime = (referenceTime ?? Date.now()) + this.startDelay
-  }
-
-  getState(now?: number): VehicleStateEvent {
+  getState(distanceTraveled: number, now?: number): VehicleStateEvent {
     const currentTime = now ?? Date.now()
+    const dist = Math.max(0, Math.min(distanceTraveled, this.totalDistance))
+    const progress = this.totalDistance === 0 ? 1 : dist / this.totalDistance
 
-    if (!this.startTime) {
-      return {
-        vehicleId: this.id,
-        position: this.path[0],
-        bearing: 0,
-        progress: 0,
-        distanceTraveled: 0,
-        status: this.status,
-        timestamp: currentTime,
-      }
-    }
-
-    const elapsed = currentTime - this.startTime
-
-    if (elapsed < 0) {
-      return {
-        vehicleId: this.id,
-        position: this.path[0],
-        bearing: 0,
-        progress: 0,
-        distanceTraveled: 0,
-        status: 'waiting',
-        timestamp: currentTime,
-      }
-    }
-
-    const distanceTraveled = Math.min((elapsed / 1000) * this.speed * this.speedMultiplier, this.totalDistance)
-    const progress = this.totalDistance === 0 ? 1 : distanceTraveled / this.totalDistance
-
-    if (distanceTraveled === 0) {
+    if (dist <= 0) {
       return {
         vehicleId: this.id,
         position: this.path[0],
@@ -105,21 +63,21 @@ export class Vehicle {
       }
     }
 
-    const state = this.pointAtDistance(this.path, distanceTraveled)
+    const state = this.pointAtDistance(this.path, dist)
 
     return {
       vehicleId: this.id,
       position: state.point,
       bearing: state.bearing,
       progress,
-      distanceTraveled,
+      distanceTraveled: dist,
       status: 'moving',
       timestamp: currentTime,
     }
   }
 
-  isArrived(now?: number): boolean {
-    return this.getState(now).status === 'arrived'
+  getTotalDistance(): number {
+    return this.totalDistance
   }
 
   private calculateTotalDistance(): number {

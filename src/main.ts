@@ -65,6 +65,8 @@ async function main() {
   const goBtn = document.getElementById('go-btn') as HTMLButtonElement
   const speedSlider = document.getElementById('speed-slider') as HTMLInputElement
   const speedDisplay = document.getElementById('speed-display') as HTMLElement
+  const progressSlider = document.getElementById('progress-slider') as HTMLInputElement
+  const progressDisplay = document.getElementById('progress-display') as HTMLElement
 
   let speedMultiplier = 1
 
@@ -73,6 +75,16 @@ async function main() {
     speedDisplay.textContent = `${speedMultiplier}x`
     fleet.setSpeedMultiplier(speedMultiplier)
     console.log(LOG_PREFIX, 'Speed changed to', speedMultiplier, 'x')
+  })
+
+  progressSlider.addEventListener('input', () => {
+    const p = parseFloat(progressSlider.value)
+    progressDisplay.textContent = `${(p * 100).toFixed(1)}%`
+    fleet.setProgress(p)
+  })
+
+  progressSlider.addEventListener('change', () => {
+    fleet.resume()
   })
 
   goBtn.addEventListener('click', async () => {
@@ -92,17 +104,12 @@ async function main() {
         })
         console.log(LOG_PREFIX, `Route ${route.id} fetched: ${rawRoute.path.length} points, ${rawRoute.distanceMeters}m`)
 
-        const effectiveSpeed = config.fleet.speedMetersPerSecond * speedMultiplier
-        const staggerMs = i * ((config.fleet.desiredGapMeters / effectiveSpeed) * 1000)
-
         fleet.addVehicle({
           id: route.id,
           path: rawRoute.path,
-          speedMetersPerSecond: config.fleet.speedMetersPerSecond,
-          startDelayMs: staggerMs,
+          startProgress: i * 0.001,
         })
-        fleet.getVehicle(route.id)?.setSpeedMultiplier(speedMultiplier)
-        console.log(LOG_PREFIX, `Vehicle ${route.id} added (stagger: ${staggerMs.toFixed(0)}ms, gap: ${config.fleet.desiredGapMeters}m, multiplier: ${speedMultiplier}x)`)
+        console.log(LOG_PREFIX, `Vehicle ${route.id} added, distance: ${rawRoute.distanceMeters}m`)
 
          const colors = ['red_360', 'blue_360', 'green_360', 'yellow_360']
          const colorIndex = i % colors.length
@@ -113,6 +120,7 @@ async function main() {
 
       console.log(LOG_PREFIX, 'Starting all vehicles...')
       statusEl.textContent = 'Starting vehicles...'
+      progressSlider.disabled = false
       fleet.startAll()
       console.log(LOG_PREFIX, 'Fleet started')
     } catch (error) {
@@ -139,8 +147,12 @@ async function main() {
     adapter.setViewport(event.payload as { center: LatLng; zoom: number })
   })
 
-  bus.on('vehicle:update', (event) => {
-    // console.log(LOG_PREFIX, `Vehicle update: ${event.payload.vehicleId} at (${(event.payload.position as LatLng)?.lat.toFixed(4)}, ${(event.payload.position as LatLng)?.lng.toFixed(4)}) status=${event.payload.status}`)
+  bus.on('fleet:positions', () => {
+    if (!progressSlider.disabled) {
+      const p = fleet.getOverallProgress()
+      progressSlider.value = String(p)
+      progressDisplay.textContent = `${(p * 100).toFixed(1)}%`
+    }
   })
 
   console.log(LOG_PREFIX, 'App ready. Click "Go!" to start.')

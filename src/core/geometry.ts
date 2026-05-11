@@ -148,7 +148,8 @@ export function splitPathAt(
     return { traveled: [path[0]], remaining: [...path], splitIndex: 0 }
   }
 
-  let i = Math.max(0, Math.min(startIndex, cumDists.length - 2))
+  const start = distanceMeters < cumDists[startIndex] ? 0 : Math.max(0, Math.min(startIndex, cumDists.length - 2))
+  let i = start
   for (; i < cumDists.length - 1; i++) {
     if (cumDists[i + 1] >= distanceMeters) break
   }

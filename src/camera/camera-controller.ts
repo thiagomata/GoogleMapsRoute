@@ -9,16 +9,20 @@ export interface CameraConfig {
   targetCoverage: number
   throttleMs: number
   zoomCooldownMs: number
+  leadTimeMs: number
+  followCooldownMs: number
 }
 
 const DEFAULT_CONFIG: CameraConfig = {
   defaultZoom: 12,
-  initialZoom: 14,
+  initialZoom: 17,
   minZoom: 3,
   maxZoom: 18,
   targetCoverage: 0.5,
-  throttleMs: 1000,
+  throttleMs: 100,
   zoomCooldownMs: 2000,
+  leadTimeMs: 2000,
+  followCooldownMs: 2000,
 }
 
 export class CameraController {
@@ -28,6 +32,8 @@ export class CameraController {
   private lastUpdate: number = 0
   private lastZoomChange: number = -9999999999999
   private currentCenter: LatLng | null = null
+  private lastPanTime: number = 0
+  private wasInSingleMode: boolean = false
 
   constructor(bus: EventBus, config: Partial<CameraConfig> = {}) {
     this.bus = bus
@@ -35,25 +41,68 @@ export class CameraController {
     this.currentZoom = config.defaultZoom ?? DEFAULT_CONFIG.defaultZoom
 
     this.bus.on('fleet:positions', (event) => {
-      this.handlePositions(event.payload.positions as LatLng[], event.payload.allArrived as boolean)
+      const positions = event.payload.positions as LatLng[]
+      const allStates = event.payload.states as Array<{ status: string; bearing: number }> | undefined
+      const allArrived = event.payload.allArrived as boolean
+      const speed = event.payload.speedMetersPerSecond as number | undefined
+      const hasStates = allStates !== undefined
+      const moving = hasStates
+        ? positions.filter((_, i) => allStates[i]?.status === 'moving')
+        : positions
+
+      if (allArrived) {
+        this.handleAllArrived(positions)
+        return
+      }
+
+      if (moving.length === 1 && speed && hasStates) {
+        const idx = allStates.findIndex((s) => s.status === 'moving')
+        this.handleSingleMoving(positions[idx], allStates[idx].bearing, speed)
+      } else {
+        this.handleMultiMoving(moving.length > 0 ? moving : positions)
+      }
     })
   }
 
-  private handlePositions(positions: LatLng[], allArrived: boolean): void {
+  private handleAllArrived(positions: LatLng[]): void {
+    console.log('[Camera]', 'All arrived, emitting fitBounds')
+    this.bus.emit('camera:fitbounds', { points: positions })
+    this.currentCenter = this.calculateCenter(positions)
+    this.lastUpdate = Date.now()
+    this.wasInSingleMode = false
+  }
+
+  private handleSingleMoving(pos: LatLng, bearing: number, speed: number): void {
+    const now = Date.now()
+
+    if (this.currentCenter === null || !this.wasInSingleMode) {
+      this.wasInSingleMode = true
+      this.bus.emit('camera:update', { center: pos, zoom: this.config.initialZoom })
+      this.currentCenter = pos
+      this.currentZoom = this.config.initialZoom
+      this.lastPanTime = now
+      this.lastUpdate = now
+      return
+    }
+
+    if (now - this.lastPanTime < this.config.followCooldownMs) return
+
+    const predicted = this.predictPosition(pos, bearing, speed, this.config.leadTimeMs / 1000)
+    console.log('[Camera]', 'Lead-follow pan to predicted:', predicted)
+    this.bus.emit('camera:update', { center: predicted, zoom: this.currentZoom })
+    this.currentCenter = predicted
+    this.lastPanTime = now
+    this.lastUpdate = now
+  }
+
+  private handleMultiMoving(positions: LatLng[]): void {
+    this.wasInSingleMode = false
     if (positions.length === 0) return
 
     const now = Date.now()
     if (now - this.lastUpdate < this.config.throttleMs) return
 
     const center = this.calculateCenter(positions)
-
-    if (allArrived) {
-      console.log('[Camera]', 'All arrived, emitting fitBounds')
-      this.bus.emit('camera:fitbounds', { points: positions })
-      this.currentCenter = center
-      this.lastUpdate = now
-      return
-    }
 
     if (this.currentCenter === null) {
       const initialZoom = this.config.initialZoom
@@ -67,13 +116,17 @@ export class CameraController {
 
     const bounds = this.calculateBounds(positions)
     const maxSpan = Math.max(bounds.latSpan, bounds.lngSpan)
-    if (maxSpan === 0) return
 
-    const targetZoom = this.calculateZoom(positions, center)
-    const finalZoom = this.applyZoomHysteresis(targetZoom, now)
+    let finalZoom: number
+    if (maxSpan === 0) {
+      finalZoom = positions.length === 1 ? this.config.initialZoom : this.currentZoom
+    } else {
+      const targetZoom = this.calculateZoom(positions, center)
+      finalZoom = this.applyZoomHysteresis(targetZoom, now)
+    }
 
     if (
-      this.distance(this.currentCenter, center) > 0.001 ||
+      this.distance(this.currentCenter, center) > 0.00001 ||
       Math.abs(this.currentZoom - finalZoom) > 0.5
     ) {
       console.log('[Camera]', 'Emitting update:', { center, zoom: finalZoom })
@@ -83,6 +136,20 @@ export class CameraController {
     }
 
     this.lastUpdate = now
+  }
+
+  private predictPosition(pos: LatLng, bearing: number, speedMps: number, leadSeconds: number): LatLng {
+    const bearingRad = (bearing * Math.PI) / 180
+    const dist = speedMps * leadSeconds
+    const latRad = (pos.lat * Math.PI) / 180
+
+    const metersPerDegLat = 111320
+    const metersPerDegLng = 111320 * Math.cos(latRad)
+
+    return {
+      lat: pos.lat + (dist * Math.cos(bearingRad)) / metersPerDegLat,
+      lng: pos.lng + (dist * Math.sin(bearingRad)) / metersPerDegLng,
+    }
   }
 
   private calculateCenter(positions: LatLng[]): LatLng {
@@ -126,8 +193,14 @@ export class CameraController {
   }
 
   private applyZoomHysteresis(targetZoom: number, now: number): number {
-    const timeSinceLastZoom = now - this.lastZoomChange
+    const zoomingOut = targetZoom < this.currentZoom
 
+    if (zoomingOut) {
+      this.lastZoomChange = now
+      return targetZoom
+    }
+
+    const timeSinceLastZoom = now - this.lastZoomChange
     if (timeSinceLastZoom < this.config.zoomCooldownMs) {
       return this.currentZoom
     }

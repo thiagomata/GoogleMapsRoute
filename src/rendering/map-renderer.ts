@@ -14,6 +14,7 @@ interface VehicleRenderState {
   path: LatLng[]
   cumulativeDistances: number[]
   currentSplitIndex: number
+  arrivedLogged: boolean
 }
 
 export interface MapRendererConfig {
@@ -22,6 +23,29 @@ export interface MapRendererConfig {
   fullPathColor: string
   strokeWidth: number
   vehicleSize: number
+}
+
+function darkenColor(hex: string, factor: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  const dr = Math.round(r * (1 - factor))
+  const dg = Math.round(g * (1 - factor))
+  const db = Math.round(b * (1 - factor))
+  return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`
+}
+
+function blendColor(hex: string, targetHex: string, factor: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  const tr = parseInt(targetHex.slice(1, 3), 16)
+  const tg = parseInt(targetHex.slice(3, 5), 16)
+  const tb = parseInt(targetHex.slice(5, 7), 16)
+  const nr = Math.round(r + (tr - r) * factor)
+  const ng = Math.round(g + (tg - g) * factor)
+  const nb = Math.round(b + (tb - b) * factor)
+  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`
 }
 
 const DEFAULT_CONFIG: MapRendererConfig = {
@@ -74,7 +98,7 @@ export class MapRenderer {
 
     const remainingPath = this.adapter.createPolyline({
       path,
-      strokeColor: color,
+      strokeColor: darkenColor(color, 0.5),
       strokeWeight: this.config.strokeWidth,
       strokeOpacity: 1,
       zIndex: 2,
@@ -82,7 +106,7 @@ export class MapRenderer {
 
     const traveledPath = this.adapter.createPolyline({
       path: [path[0]],
-      strokeColor: '#FFFFFF',
+      strokeColor: blendColor(color, '#C0C0C0', 0.6),
       strokeWeight: this.config.strokeWidth,
       strokeOpacity: 1,
       zIndex: 1,
@@ -113,6 +137,7 @@ export class MapRenderer {
       path,
       cumulativeDistances: cumDists,
       currentSplitIndex: 0,
+      arrivedLogged: false,
     })
   }
 
@@ -169,7 +194,8 @@ export class MapRenderer {
       state.remainingPath.setPath(remaining)
     }
 
-    if (status === 'arrived') {
+    if (status === 'arrived' && !state.arrivedLogged) {
+      state.arrivedLogged = true
       console.log('[MapRenderer]', 'Vehicle', vehicleId, 'arrived')
     }
   }

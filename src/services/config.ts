@@ -27,8 +27,10 @@ export const config: AppConfig = {
     minZoom: 3,
     maxZoom: 18,
     targetCoverage: 0.5,
-    throttleMs: 1000,
+    throttleMs: 100,
     zoomCooldownMs: 2000,
+    leadTimeMs: 2000,
+    followCooldownMs: 2000,
   },
   mapRenderer: {
     spriteBasePath: 'images/trucks/red_360',
